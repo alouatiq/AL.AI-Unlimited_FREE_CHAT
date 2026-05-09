@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FreeChat — Serverless AI</title>
+<style>
+  :root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--txt:#e6edf3;--muted:#8b949e;--accent:#3b82f6;--danger:#f85149;--ok:#3fb950;--warn:#d29922;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:ui-monospace,Consolas,Menlo,monospace;}
+  *{box-sizing:border-box}html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--txt);font-family:var(--sans);display:flex;overflow:hidden;font-size:15px}
+  #sidebar{width:260px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column}
+  .side-head{padding:14px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border);font-weight:700}
+  .side-head .dot{width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .side-head .grow{flex:1}
+  .icon-btn{background:none;border:1px solid var(--border);color:var(--txt);width:32px;height:32px;border-radius:8px;cursor:pointer}
+  #newChat{margin:12px;padding:10px;border:1px solid var(--border);background:var(--bg3);color:var(--txt);border-radius:10px;cursor:pointer;font-weight:600}
+  #history{flex:1;overflow-y:auto;padding:0 8px 8px}
+  .hist{padding:9px 11px;border-radius:8px;cursor:pointer;display:flex;gap:8px;color:var(--muted);font-size:14px}
+  .hist:hover,.hist.active{background:var(--bg3);color:var(--txt)}
+  .hist .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hist .del{opacity:0;border:none;background:none;color:var(--muted);cursor:pointer}
+  .hist:hover .del{opacity:1}
+  #main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .topbar{height:52px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:0 14px}
+  .spacer{flex:1}
+  .toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+  .switch{position:relative;width:44px;height:24px}
+  .switch input{opacity:0;width:0;height:0}
+  .slider{position:absolute;inset:0;background:var(--bg3);border:1px solid var(--border);border-radius:24px;cursor:pointer;transition:.2s}
+  .slider:before{content:"";position:absolute;height:16px;width:16px;left:3px;top:3px;background:var(--muted);border-radius:50%;transition:.2s}
+  .switch input:checked + .slider{background:var(--danger)}
+  .switch input:checked + .slider:before{transform:translateX(20px);background:#fff}
+  #messages{flex:1;overflow-y:auto;padding:24px 0}
+  .row{max-width:780px;margin:0 auto;padding:8px 20px;display:flex;gap:14px}
+  .av{width:30px;height:30px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700}
+  .av.u{background:var(--accent)}.av.a{background:var(--bg3);border:1px solid var(--border)}
+  .body{flex:1;min-width:0;line-height:1.6;padding-top:3px;overflow-wrap:break-word}
+  .who{font-size:12px;color:var(--muted);margin-bottom:2px}
+  pre{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto;font-family:var(--mono);font-size:13px}
+  code{font-family:var(--mono)} :not(pre)>code{background:var(--bg3);padding:2px 5px;border-radius:4px}
+  .status{max-width:780px;margin:0 auto;padding:2px 20px 2px 64px;font-size:12px;color:var(--warn)}
+  .welcome{max-width:560px;margin:12vh auto;text-align:center;color:var(--muted)}
+  .welcome h1{color:var(--txt)}
+  .composer-wrap{padding:12px 20px 18px}
+  .composer{max-width:780px;margin:0 auto;border:1px solid var(--border);border-radius:16px;background:var(--bg2);padding:8px 8px 8px 16px;display:flex;align-items:flex-end;gap:8px}
+  #input{flex:1;background:none;border:none;color:var(--txt);font-family:var(--sans);font-size:15px;resize:none;outline:none;max-height:180px;padding:8px 0}
+  #send{width:38px;height:38px;border-radius:10px;border:none;background:var(--accent);color:#fff;cursor:pointer;flex-shrink:0}
+  #send.stop{background:var(--danger)}
+  .modal-bg{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;padding:22px}
+  .field{margin-bottom:16px}.field label{display:block;font-weight:600;margin-bottom:6px}
+  .field .desc{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .field input,.field textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--txt);border-radius:8px;padding:10px;font-family:var(--sans);font-size:14px}
+  .field textarea{font-family:var(--mono);font-size:12px;min-height:90px}
+  .actions{display:flex;gap:10px;justify-content:flex-end}
+  .btn{padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--txt);cursor:pointer;font-weight:600}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <div class="side-head"><span class="dot"></span><span class="grow">FreeChat</span>
+    <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button></div>
+  <button id="newChat">+ New chat</button>
+  <div id="history"></div>
+  <div style="padding:12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)">Free OpenRouter models · history saved in your browser</div>
+</div>
+<div id="main">
+  <div class="topbar"><div class="spacer"></div>
+    <div class="toggle"><span id="modeLabel">Normal</span>
+      <label class="switch"><input type="checkbox" id="unc"><span class="slider"></span></label></div>
+  </div>
+  <div id="messages"></div>
+  <div class="composer-wrap"><div class="composer">
+    <textarea id="input" rows="1" placeholder="Message FreeChat…"></textarea>
+    <button id="send">➤</button>
+  </div></div>
+</div>
+
+<div class="modal-bg" id="modal"><div class="modal">
+  <h2>Settings</h2>
+  <p class="desc" style="color:var(--muted)">Stored only in your browser (localStorage).</p>
+  <div class="field"><label>OpenRouter API key</label>
+    <div class="desc">Free key at <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>.</div>
+    <input type="password" id="key" placeholder="sk-or-v1-…"></div>
+  <div class="field"><label>Normal models (fallback order)</label><textarea id="normal"></textarea></div>
+  <div class="field"><label>Uncensored models (fallback order)</label><textarea id="uncm"></textarea></div>
+  <div class="actions"><button class="btn primary" id="save">Save</button></div>
+</div></div>
+
+<script>
+"use strict";
+const DEFAULT_NORMAL=["meta-llama/llama-3.3-70b-instruct:free","google/gemini-2.0-flash-exp:free","qwen/qwen-2.5-72b-instruct:free","mistralai/mistral-small-3.1-24b-instruct:free"];
+const DEFAULT_UNC=["cognitivecomputations/dolphin3.0-mistral-24b:free","mistralai/mistral-7b-instruct:free","meta-llama/llama-3.3-70b-instruct:free"];
+const API="https://openrouter.ai/api/v1/chat/completions";
+const LS={get:(k,d)=>{try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v);}catch(e){return d;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
+let cfg={key:LS.get("k",""),normal:LS.get("n",DEFAULT_NORMAL),unc:LS.get("u",DEFAULT_UNC),uncensored:LS.get("um",false)};
+let chats=LS.get("chats",[]),curId=LS.get("cur",null),controller=null;
+const $=s=>document.querySelector(s);
+const msgs=$("#messages"),hist=$("#history"),input=$("#input"),sendBtn=$("#send"),modal=$("#modal");
+
+function cur(){return chats.find(c=>c.id===curId);}
+function newChat(){const id="c"+Date.now();chats.unshift({id,title:"New chat",messages:[]});curId=id;persist();render();input.focus();}
+function persist(){LS.set("chats",chats);LS.set("cur",curId);}
+function renderHist(){hist.innerHTML="";for(const c of chats){const d=document.createElement("div");d.className="hist"+(c.id===curId?" active":"");d.innerHTML='<span>💬</span><span class="t"></span><button class="del">✕</button>';d.querySelector(".t").textContent=c.title;d.onclick=e=>{if(e.target.classList.contains("del"))return;curId=c.id;persist();render();};d.querySelector(".del").onclick=e=>{e.stopPropagation();chats=chats.filter(x=>x.id!==c.id);if(curId===c.id)curId=chats[0]?.id||null;persist();render();};hist.appendChild(d);}}
+function render(){renderHist();const c=cur();if(!c||!c.messages.length){msgs.innerHTML='<div class="welcome"><h1>What can I help with?</h1><p>Free AI in your browser. Toggle Uncensored top-right.</p></div>';return;}msgs.innerHTML="";for(const m of c.messages)msgs.appendChild(row(m));msgs.scrollTop=msgs.scrollHeight;}
+function row(m){const d=document.createElement("div");d.className="row";const u=m.role==="user";d.innerHTML=`<div class="av ${u?'u':'a'}">${u?'U':'AI'}</div><div class="body"><div class="who">${u?'You':'Assistant'+(m.model?' · '+esc(m.model):'')}</div><div class="c">${u?esc(m.content).replace(/\\n/g,'<br>'):md(m.content)}</div></div>`;return d;}
+function esc(s){return s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function md(s){if(!s)return"";let o=esc(s);o=o.replace(/```([\\s\\S]*?)```/g,(_,c)=>"<pre><code>"+c.trim()+"</code></pre>");o=o.replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\\*\\*([^*]+)\\*\\*/g,"<strong>$1</strong>");return o.split(/\\n{2,}/).map(p=>/^<pre/.test(p)?p:"<p>"+p.replace(/\\n/g,"<br>")+"</p>").join("");}
+
+async function send(){
+  if(controller){controller.abort();return;}
+  const text=input.value.trim();if(!text)return;
+  if(!cfg.key){openSettings();return;}
+  let c=cur();if(!c){newChat();c=cur();}
+  c.messages.push({role:"user",content:text});if(c.title==="New chat")c.title=text.slice(0,40);
+  input.value="";persist();render();
+  const ai={role:"assistant",content:"",model:null};const r=row(ai);msgs.appendChild(r);const cel=r.querySelector(".c");
+  setSending(true);controller=new AbortController();
+  const models=cfg.uncensored?cfg.unc:cfg.normal;
+  const apiMsgs=c.messages.map(m=>({role:m.role,content:m.content}));
+  let ok=false,err=null,st=null;
+  const status=t=>{if(!st){st=document.createElement("div");st.className="status";r.after(st);}st.textContent=t;};
+  for(let i=0;i<models.length;i++){
+    ai.content="";
+    try{
+      r.querySelector(".who").textContent="Assistant · "+models[i];
+      await stream(models[i],apiMsgs,ch=>{ai.content+=ch;cel.innerHTML=md(ai.content);msgs.scrollTop=msgs.scrollHeight;},controller.signal);
+      if(!ai.content.trim())throw new Error("empty");
+      ai.model=models[i];ok=true;if(st)st.remove();break;
+    }catch(e){err=e;if(e.name==="AbortError")break;if(i<models.length-1)status("⚠ "+models[i]+" failed — trying next…");}
+  }
+  if(!ok&&!(controller.signal.aborted&&ai.content))ai.content="**All models failed.** "+(err?err.message:"")+" — check your key/models in ⚙.";
+  cel.innerHTML=md(ai.content);c.messages.push(ai);controller=null;setSending(false);persist();msgs.scrollTop=msgs.scrollHeight;
+}
+async function stream(model,messages,onCh,signal){
+  const res=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+cfg.key,"HTTP-Referer":location.origin,"X-Title":"FreeChat"},body:JSON.stringify({model,messages,stream:true}),signal});
+  if(!res.ok){let m="HTTP "+res.status;try{const j=await res.json();m=j?.error?.message||m;}catch(e){}throw new Error(m);}
+  const rd=res.body.getReader(),dec=new TextDecoder();let buf="";
+  while(true){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});const lines=buf.split("\\n");buf=lines.pop();
+    for(const l of lines){const t=l.trim();if(!t.startsWith("data:"))continue;const d=t.slice(5).trim();if(d==="[DONE]")return;try{const j=JSON.parse(d);const x=j.choices?.[0]?.delta?.content;if(x)onCh(x);}catch(e){}}}
+}
+function setSending(on){sendBtn.textContent=on?"■":"➤";sendBtn.classList.toggle("stop",on);}
+function openSettings(){$("#key").value=cfg.key;$("#normal").value=cfg.normal.join("\\n");$("#uncm").value=cfg.unc.join("\\n");modal.classList.add("show");}
+$("#save").onclick=()=>{cfg.key=$("#key").value.trim();cfg.normal=$("#normal").value.split("\\n").map(s=>s.trim()).filter(Boolean);cfg.unc=$("#uncm").value.split("\\n").map(s=>s.trim()).filter(Boolean);if(!cfg.normal.length)cfg.normal=DEFAULT_NORMAL;if(!cfg.unc.length)cfg.unc=DEFAULT_UNC;LS.set("k",cfg.key);LS.set("n",cfg.normal);LS.set("u",cfg.unc);modal.classList.remove("show");};
+$("#settingsBtn").onclick=openSettings;
+$("#newChat").onclick=newChat;
+$("#send").onclick=send;
+modal.onclick=e=>{if(e.target===modal)modal.classList.remove("show");};
+$("#unc").onchange=e=>{cfg.uncensored=e.target.checked;LS.set("um",cfg.uncensored);$("#modeLabel").textContent=cfg.uncensored?"Uncensored":"Normal";};
+input.onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}};
+$("#unc").checked=cfg.uncensored;$("#modeLabel").textContent=cfg.uncensored?"Uncensored":"Normal";
+render();if(!cfg.key)openSettings();
+</script>
+</body>
+</html>
