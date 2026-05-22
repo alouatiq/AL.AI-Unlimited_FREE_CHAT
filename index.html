@@ -3,157 +3,1027 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>FreeChat — Serverless AI</title>
+<title>AL-AI</title>
 <style>
-  :root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--txt:#e6edf3;--muted:#8b949e;--accent:#3b82f6;--danger:#f85149;--ok:#3fb950;--warn:#d29922;
-    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:ui-monospace,Consolas,Menlo,monospace;}
-  *{box-sizing:border-box}html,body{height:100%;margin:0}
+  :root{
+    --bg:#0d1117; --bg2:#161b22; --bg3:#21262d; --border:#30363d;
+    --txt:#e6edf3; --muted:#8b949e; --accent:#3b82f6; --accent2:#2563eb;
+    --user:#1f6feb22; --danger:#f85149; --ok:#3fb950; --warn:#d29922;
+    --radius:12px; --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",SFMono-Regular,ui-monospace,Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  html[data-theme="light"]{
+    --bg:#ffffff; --bg2:#f6f8fa; --bg3:#eaeef2; --border:#d0d7de;
+    --txt:#1f2328; --muted:#636c76; --user:#3b82f611;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
   body{background:var(--bg);color:var(--txt);font-family:var(--sans);display:flex;overflow:hidden;font-size:15px}
-  #sidebar{width:260px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column}
-  .side-head{padding:14px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border);font-weight:700}
-  .side-head .dot{width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
-  .side-head .grow{flex:1}
-  .icon-btn{background:none;border:1px solid var(--border);color:var(--txt);width:32px;height:32px;border-radius:8px;cursor:pointer}
-  #newChat{margin:12px;padding:10px;border:1px solid var(--border);background:var(--bg3);color:var(--txt);border-radius:10px;cursor:pointer;font-weight:600}
+
+  /* Sidebar */
+  #sidebar{width:280px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;transition:margin-left .2s}
+  #sidebar.collapsed{margin-left:-280px}
+  .side-head{padding:14px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border)}
+  .brand{font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px;flex:1}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  #newChat,#newGroup{margin:12px;padding:10px;border:1px solid var(--border);background:var(--bg3);color:var(--txt);border-radius:var(--radius);cursor:pointer;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px}
+  #newChat:hover,#newGroup:hover{border-color:var(--accent)}
   #history{flex:1;overflow-y:auto;padding:0 8px 8px}
-  .hist{padding:9px 11px;border-radius:8px;cursor:pointer;display:flex;gap:8px;color:var(--muted);font-size:14px}
-  .hist:hover,.hist.active{background:var(--bg3);color:var(--txt)}
-  .hist .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .hist .del{opacity:0;border:none;background:none;color:var(--muted);cursor:pointer}
-  .hist:hover .del{opacity:1}
+  .group{margin-bottom:2px}
+  .group-head{display:flex;align-items:center;gap:6px;padding:8px;border-radius:8px;cursor:pointer;font-size:13px}
+  .group-head:hover{background:var(--bg3)}
+  .group-head.active{background:var(--bg3)}
+  .gtwisty{width:14px;text-align:center;color:var(--muted);cursor:pointer;flex-shrink:0}
+  .gname{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+  .gdot{color:var(--accent);font-size:9px;vertical-align:middle}
+  .gact{opacity:0;border:none;background:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px;flex-shrink:0}
+  .group-head:hover .gact{opacity:.85}
+  .gact:hover{color:var(--txt)}
+  .group-chats{margin-left:11px;border-left:1px solid var(--border);padding-left:4px}
+  .ghint{font-size:12px;color:var(--muted);padding:6px 8px}
+  .hist-item{padding:10px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px;margin-bottom:2px}
+  .hist-item:hover{background:var(--bg3);color:var(--txt)}
+  .hist-item.active{background:var(--bg3);color:var(--txt)}
+  .hist-item .title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hist-item .del{opacity:0;color:var(--muted);border:none;background:none;cursor:pointer;padding:2px}
+  .hist-item:hover .del{opacity:1}
+  .hist-item .del:hover{color:var(--danger)}
+  .side-foot{padding:12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
+
+  /* Main */
   #main{flex:1;display:flex;flex-direction:column;min-width:0}
-  .topbar{height:52px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:0 14px}
-  .spacer{flex:1}
-  .toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+  .topbar{height:52px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--bg)}
+  .icon-btn{background:none;border:1px solid var(--border);color:var(--txt);width:34px;height:34px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px}
+  .icon-btn:hover{background:var(--bg3)}
+  .topbar .spacer{flex:1}
+
+  /* Toggle switch */
+  .toggle-wrap{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);user-select:none}
   .switch{position:relative;width:44px;height:24px}
   .switch input{opacity:0;width:0;height:0}
   .slider{position:absolute;inset:0;background:var(--bg3);border:1px solid var(--border);border-radius:24px;cursor:pointer;transition:.2s}
   .slider:before{content:"";position:absolute;height:16px;width:16px;left:3px;top:3px;background:var(--muted);border-radius:50%;transition:.2s}
   .switch input:checked + .slider{background:var(--danger)}
   .switch input:checked + .slider:before{transform:translateX(20px);background:#fff}
+  .mode-label{font-weight:600}
+  .mode-label.unc{color:var(--danger)}
+
+  /* Messages */
   #messages{flex:1;overflow-y:auto;padding:24px 0}
-  .row{max-width:780px;margin:0 auto;padding:8px 20px;display:flex;gap:14px}
-  .av{width:30px;height:30px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700}
-  .av.u{background:var(--accent)}.av.a{background:var(--bg3);border:1px solid var(--border)}
-  .body{flex:1;min-width:0;line-height:1.6;padding-top:3px;overflow-wrap:break-word}
-  .who{font-size:12px;color:var(--muted);margin-bottom:2px}
-  pre{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto;font-family:var(--mono);font-size:13px}
-  code{font-family:var(--mono)} :not(pre)>code{background:var(--bg3);padding:2px 5px;border-radius:4px}
-  .status{max-width:780px;margin:0 auto;padding:2px 20px 2px 64px;font-size:12px;color:var(--warn)}
-  .welcome{max-width:560px;margin:12vh auto;text-align:center;color:var(--muted)}
-  .welcome h1{color:var(--txt)}
-  .composer-wrap{padding:12px 20px 18px}
-  .composer{max-width:780px;margin:0 auto;border:1px solid var(--border);border-radius:16px;background:var(--bg2);padding:8px 8px 8px 16px;display:flex;align-items:flex-end;gap:8px}
-  #input{flex:1;background:none;border:none;color:var(--txt);font-family:var(--sans);font-size:15px;resize:none;outline:none;max-height:180px;padding:8px 0}
-  #send{width:38px;height:38px;border-radius:10px;border:none;background:var(--accent);color:#fff;cursor:pointer;flex-shrink:0}
+  .msg-row{max-width:820px;margin:0 auto;padding:8px 20px;display:flex;gap:14px}
+  .avatar{width:30px;height:30px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+  .avatar.user{background:var(--accent)}
+  .avatar.ai{background:var(--bg3);border:1px solid var(--border)}
+  .msg-body{flex:1;min-width:0;padding-top:3px;line-height:1.6;overflow-wrap:break-word}
+  .msg-body .who{font-size:12px;color:var(--muted);margin-bottom:2px}
+  .msg-body .who .model{opacity:.7}
+  .msg-body p{margin:0 0 10px}
+  .msg-body pre{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto;font-family:var(--mono);font-size:13px;position:relative}
+  .msg-body code{font-family:var(--mono);font-size:.9em}
+  .msg-body :not(pre)>code{background:var(--bg3);padding:2px 5px;border-radius:4px}
+  .msg-body pre .copy{position:absolute;top:6px;right:6px;font-size:11px;padding:3px 7px;background:var(--bg3);border:1px solid var(--border);color:var(--muted);border-radius:5px;cursor:pointer;opacity:0}
+  .msg-body pre:hover .copy{opacity:1}
+  .msg-body ul,.msg-body ol{margin:0 0 10px;padding-left:22px}
+  .msg-body h1,.msg-body h2,.msg-body h3{margin:14px 0 8px;line-height:1.3}
+  .msg-body a{color:var(--accent)}
+  .msg-body blockquote{border-left:3px solid var(--border);margin:0 0 10px;padding-left:12px;color:var(--muted)}
+  .cursor{display:inline-block;width:8px;height:15px;background:var(--txt);vertical-align:text-bottom;animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .status-line{max-width:820px;margin:0 auto;padding:2px 20px 2px 64px;font-size:12px;color:var(--warn)}
+
+  /* Welcome */
+  .welcome{max-width:640px;margin:8vh auto;text-align:center;padding:20px}
+  .welcome h1{font-size:30px;margin:0 0 8px}
+  .welcome p{color:var(--muted);margin:0 0 24px}
+  .suggestions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .sugg{padding:14px;border:1px solid var(--border);border-radius:var(--radius);text-align:left;cursor:pointer;background:var(--bg2)}
+  .sugg:hover{border-color:var(--accent)}
+  .sugg b{display:block;margin-bottom:3px}
+  .sugg span{color:var(--muted);font-size:13px}
+
+  /* Composer */
+  .composer-wrap{padding:12px 20px 18px;background:var(--bg)}
+  .composer{max-width:820px;margin:0 auto;border:1px solid var(--border);border-radius:16px;background:var(--bg2);padding:8px 8px 8px 16px;display:flex;align-items:flex-end;gap:8px}
+  .composer:focus-within{border-color:var(--accent)}
+  #input{flex:1;background:none;border:none;color:var(--txt);font-family:var(--sans);font-size:15px;resize:none;outline:none;max-height:200px;line-height:1.5;padding:8px 0}
+  #send{width:38px;height:38px;border-radius:10px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-size:16px;flex-shrink:0}
+  #send:disabled{opacity:.4;cursor:not-allowed}
   #send.stop{background:var(--danger)}
+  .composer-hint{max-width:820px;margin:6px auto 0;text-align:center;font-size:11px;color:var(--muted)}
+
+  /* Modal */
   .modal-bg{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
   .modal-bg.show{display:flex}
-  .modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;padding:22px}
-  .field{margin-bottom:16px}.field label{display:block;font-weight:600;margin-bottom:6px}
-  .field .desc{font-size:12px;color:var(--muted);margin-bottom:6px}
-  .field input,.field textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--txt);border-radius:8px;padding:10px;font-family:var(--sans);font-size:14px}
-  .field textarea{font-family:var(--mono);font-size:12px;min-height:90px}
-  .actions{display:flex;gap:10px;justify-content:flex-end}
-  .btn{padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--txt);cursor:pointer;font-weight:600}
+  .modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;padding:22px}
+  .modal h2{margin:0 0 4px}
+  .modal .sub{color:var(--muted);font-size:13px;margin:0 0 18px}
+  .field{margin-bottom:18px}
+  .field>label{display:block;font-weight:600;margin-bottom:6px;font-size:14px}
+  .field .desc{font-size:12px;color:var(--muted);margin-bottom:8px}
+  .field input[type=password],.field input[type=text],.field textarea,.field select{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--txt);border-radius:8px;padding:10px;font-family:var(--sans);font-size:14px}
+  .field textarea{font-family:var(--mono);font-size:12px;resize:vertical;min-height:60px}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:8px;position:sticky;bottom:-22px;background:var(--bg2);padding:12px 0 0}
+  .btn{padding:9px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--txt);cursor:pointer;font-weight:600;font-size:14px}
   .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-  a{color:var(--accent)}
+  .btn.sm{padding:4px 9px;font-size:12px;font-weight:500}
+  .btn:hover{opacity:.9}
+  a.link{color:var(--accent)}
+  code{background:var(--bg3);padding:1px 5px;border-radius:4px;font-family:var(--mono);font-size:.85em}
+
+  /* Provider cards */
+  .prov-row{border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;background:var(--bg)}
+  .prov-row.disabled{opacity:.55}
+  .prov-head{display:flex;align-items:center;gap:8px}
+  .drag-h{cursor:grab;color:var(--muted);font-size:16px;padding:0 2px;user-select:none}
+  .ord{display:flex;flex-direction:column;gap:2px}
+  .ord button{width:22px;height:15px;line-height:1;font-size:10px;padding:0;border:1px solid var(--border);background:var(--bg3);color:var(--txt);border-radius:4px;cursor:pointer}
+  .prov-head .chk{display:flex;align-items:center;gap:7px;flex:1;font-size:14px;cursor:pointer;font-weight:600}
+  .prov-head .chk input{width:16px;height:16px}
+  .prov-state{font-size:11px;padding:2px 8px;border-radius:20px;white-space:nowrap}
+  .prov-state.ok{background:#3fb95022;color:var(--ok)}
+  .prov-state.key{background:#d2992222;color:var(--warn)}
+  .prov-state.cors{background:#f8514922;color:var(--danger)}
+  .prov-body{margin-top:9px}
+  .prov-body input[type=password]{margin-bottom:8px}
+  .disclose{background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;padding:2px 0;font-weight:600}
+  .prov-note{font-size:11px;color:var(--muted);margin-top:4px}
+
+  /* Model picker */
+  .picker{border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:6px;background:var(--bg2)}
+  .picker .plabel{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:2px 0 6px}
+  .sel-list{display:flex;flex-direction:column;gap:4px;min-height:8px}
+  .sel-item{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:5px 7px;font-size:13px;font-family:var(--mono)}
+  .sel-item.drag{opacity:.4}
+  .sel-item .mv{cursor:grab;color:var(--muted)}
+  .sel-item .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sel-item .rm{cursor:pointer;color:var(--muted);border:none;background:none;font-size:14px}
+  .sel-item .rm:hover{color:var(--danger)}
+  .sel-empty{font-size:12px;color:var(--muted);padding:4px}
+  .avail-search{margin:8px 0 6px}
+  .avail{max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+  .avail-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;cursor:pointer;font-size:12.5px;font-family:var(--mono)}
+  .avail-item:hover{background:var(--bg3)}
+  .avail-item .plus{color:var(--ok);font-weight:700}
+  .avail-item.unc .name::after{content:" ·unc";color:var(--danger);font-size:10px}
+  .customrow{display:flex;gap:6px;margin-top:6px}
+  .customrow input{flex:1}
+
+  /* On-device */
+  .od-model{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px;background:var(--bg2);flex-wrap:wrap}
+  .od-model .od-name{flex:1;min-width:140px}
+  .od-model .od-name b{font-size:13px}
+  .od-model .od-name .od-meta{font-size:11px;color:var(--muted)}
+  .od-badge{font-size:11px;padding:2px 8px;border-radius:20px}
+  .od-badge.inst{background:#3fb95022;color:var(--ok)}
+  .od-badge.no{background:var(--bg3);color:var(--muted)}
+  .od-badge.dl{background:#d2992222;color:var(--warn)}
+  .tag{font-size:10px;padding:1px 6px;border-radius:10px;background:var(--bg3);color:var(--muted);margin-left:6px}
+  .tag.unc{background:#f8514922;color:var(--danger)}
+
+  #backdrop{display:none}
+  @media(max-width:720px){
+    #sidebar{position:fixed;z-index:40;height:100%;box-shadow:2px 0 20px #0008}
+    #backdrop.show{display:block;position:fixed;inset:0;background:#0007;z-index:39}
+    .suggestions{grid-template-columns:1fr}
+  }
 </style>
 </head>
 <body>
+
 <div id="sidebar">
-  <div class="side-head"><span class="dot"></span><span class="grow">FreeChat</span>
-    <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button></div>
-  <button id="newChat">+ New chat</button>
-  <div id="history"></div>
-  <div style="padding:12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)">Free OpenRouter models · history saved in your browser</div>
-</div>
-<div id="main">
-  <div class="topbar"><div class="spacer"></div>
-    <div class="toggle"><span id="modeLabel">Normal</span>
-      <label class="switch"><input type="checkbox" id="unc"><span class="slider"></span></label></div>
+  <div class="side-head">
+    <div class="brand"><span class="dot"></span> AL-AI</div>
+    <button class="icon-btn" id="themeBtn" title="Toggle theme">◐</button>
+    <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
   </div>
-  <div id="messages"></div>
-  <div class="composer-wrap"><div class="composer">
-    <textarea id="input" rows="1" placeholder="Message FreeChat…"></textarea>
-    <button id="send">➤</button>
-  </div></div>
+  <div style="display:flex;gap:8px;margin:12px">
+    <button id="newChat" style="flex:1;margin:0">+ Chat</button>
+    <button id="newGroup" style="flex:1;margin:0">+ Group</button>
+  </div>
+  <div id="history"></div>
+  <div class="side-foot">
+    100% in-browser · multi-provider + on-device · <a class="link" href="#" id="clearAll">clear all</a>
+  </div>
 </div>
 
-<div class="modal-bg" id="modal"><div class="modal">
-  <h2>Settings</h2>
-  <p class="desc" style="color:var(--muted)">Stored only in your browser (localStorage).</p>
-  <div class="field"><label>OpenRouter API key</label>
-    <div class="desc">Free key at <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>.</div>
-    <input type="password" id="key" placeholder="sk-or-v1-…"></div>
-  <div class="field"><label>Normal models (fallback order)</label><textarea id="normal"></textarea></div>
-  <div class="field"><label>Uncensored models (fallback order)</label><textarea id="uncm"></textarea></div>
-  <div class="actions"><button class="btn primary" id="save">Save</button></div>
-</div></div>
+<div id="backdrop"></div>
+
+<div id="main">
+  <div class="topbar">
+    <button class="icon-btn" id="menuBtn" title="Toggle sidebar">☰</button>
+    <button class="icon-btn" id="groupBtn" style="width:auto;padding:0 12px;gap:6px;font-weight:600" title="Edit this group's instructions">📁 <span id="groupBtnName">General</span></button>
+    <div class="spacer"></div>
+    <div class="toggle-wrap">
+      <span>Mode:</span>
+      <span class="mode-label" id="modeLabel">Normal</span>
+      <label class="switch">
+        <input type="checkbox" id="uncToggle" />
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <div id="messages"></div>
+
+  <div class="composer-wrap">
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="Message AL-AI…  (Enter to send, Shift+Enter for newline)"></textarea>
+      <button id="send" title="Send">➤</button>
+    </div>
+    <div class="composer-hint" id="hint">Multi-provider fallback · nothing leaves your browser except the API call</div>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div class="modal-bg" id="modal">
+  <div class="modal">
+    <h2>Settings</h2>
+    <p class="sub">Stored locally in your browser (localStorage). Priority per provider: <b>server key → your key → skip</b>. On-device needs no key.</p>
+
+    <div class="field">
+      <label>Providers &amp; fallback order</label>
+      <div class="desc">Drag <b>⠿</b> (or use ▲▼) to reorder. Tried top-to-bottom until one answers. Untick to disable. Expand a provider to choose &amp; reorder its models.</div>
+      <div id="providersBox"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" id="resetAll">Reset to defaults</button>
+      <button class="btn primary" id="saveSettings">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Group / project modal -->
+<div class="modal-bg" id="groupModal">
+  <div class="modal" style="max-width:520px">
+    <h2>Group instructions</h2>
+    <p class="sub">A group (project) holds a system prompt shared by <b>every chat inside it</b>. Create groups for different roles — e.g. “Coding”, “Arabic tutor”, “Emails”.</p>
+    <div class="field">
+      <label>Group name</label>
+      <input type="text" id="groupName" placeholder="e.g. Coding assistant">
+    </div>
+    <div class="field">
+      <label>Instructions / system prompt</label>
+      <div class="desc">Applied to every chat in this group. e.g. “You are a senior Python developer. Be concise, show code.” Leave empty for none.</div>
+      <textarea id="groupSys" style="min-height:130px" placeholder="You are a helpful assistant."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="delGroup" style="color:var(--danger)">Delete group</button>
+      <button class="btn primary" id="saveGroup">Save</button>
+    </div>
+  </div>
+</div>
 
 <script>
 "use strict";
-const DEFAULT_NORMAL=["meta-llama/llama-3.3-70b-instruct:free","google/gemini-2.0-flash-exp:free","qwen/qwen-2.5-72b-instruct:free","mistralai/mistral-small-3.1-24b-instruct:free"];
-const DEFAULT_UNC=["cognitivecomputations/dolphin3.0-mistral-24b:free","mistralai/mistral-7b-instruct:free","meta-llama/llama-3.3-70b-instruct:free"];
-const API="https://openrouter.ai/api/v1/chat/completions";
-const LS={get:(k,d)=>{try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v);}catch(e){return d;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}};
-let cfg={key:LS.get("k",""),normal:LS.get("n",DEFAULT_NORMAL),unc:LS.get("u",DEFAULT_UNC),uncensored:LS.get("um",false)};
-let chats=LS.get("chats",[]),curId=LS.get("cur",null),controller=null;
-const $=s=>document.querySelector(s);
-const msgs=$("#messages"),hist=$("#history"),input=$("#input"),sendBtn=$("#send"),modal=$("#modal");
 
-function cur(){return chats.find(c=>c.id===curId);}
-function newChat(){const id="c"+Date.now();chats.unshift({id,title:"New chat",messages:[]});curId=id;persist();render();input.focus();}
-function persist(){LS.set("chats",chats);LS.set("cur",curId);}
-function renderHist(){hist.innerHTML="";for(const c of chats){const d=document.createElement("div");d.className="hist"+(c.id===curId?" active":"");d.innerHTML='<span>💬</span><span class="t"></span><button class="del">✕</button>';d.querySelector(".t").textContent=c.title;d.onclick=e=>{if(e.target.classList.contains("del"))return;curId=c.id;persist();render();};d.querySelector(".del").onclick=e=>{e.stopPropagation();chats=chats.filter(x=>x.id!==c.id);if(curId===c.id)curId=chats[0]?.id||null;persist();render();};hist.appendChild(d);}}
-function render(){renderHist();const c=cur();if(!c||!c.messages.length){msgs.innerHTML='<div class="welcome"><h1>What can I help with?</h1><p>Free AI in your browser. Toggle Uncensored top-right.</p></div>';return;}msgs.innerHTML="";for(const m of c.messages)msgs.appendChild(row(m));msgs.scrollTop=msgs.scrollHeight;}
-function row(m){const d=document.createElement("div");d.className="row";const u=m.role==="user";d.innerHTML=`<div class="av ${u?'u':'a'}">${u?'U':'AI'}</div><div class="body"><div class="who">${u?'You':'Assistant'+(m.model?' · '+esc(m.model):'')}</div><div class="c">${u?esc(m.content).replace(/\\n/g,'<br>'):md(m.content)}</div></div>`;return d;}
-function esc(s){return s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
-function md(s){if(!s)return"";let o=esc(s);o=o.replace(/```([\\s\\S]*?)```/g,(_,c)=>"<pre><code>"+c.trim()+"</code></pre>");o=o.replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\\*\\*([^*]+)\\*\\*/g,"<strong>$1</strong>");return o.split(/\\n{2,}/).map(p=>/^<pre/.test(p)?p:"<p>"+p.replace(/\\n/g,"<br>")+"</p>").join("");}
+/* ======================= Providers ======================= */
+// All are OpenAI-compatible (Google via its /openai/ endpoint), so one streaming
+// client handles them all. corsDirect = safe to call straight from the browser
+// with a pasted key; others need the Vercel proxy (server key) due to browser CORS.
+const PROVIDERS = {
+  openrouter: { id:"openrouter", label:"OpenRouter", baseUrl:"https://openrouter.ai/api/v1",
+    keyUrl:"https://openrouter.ai/keys", keyHint:"sk-or-v1-…", corsDirect:true, live:true },
+  groq:       { id:"groq", label:"Groq (fast, free)", baseUrl:"https://api.groq.com/openai/v1",
+    keyUrl:"https://console.groq.com/keys", keyHint:"gsk_…", corsDirect:true },
+  google:     { id:"google", label:"Google Gemini (free tier)", baseUrl:"https://generativelanguage.googleapis.com/v1beta/openai",
+    keyUrl:"https://aistudio.google.com/app/apikey", keyHint:"AIza…", corsDirect:true },
+  cerebras:   { id:"cerebras", label:"Cerebras (fast, free)", baseUrl:"https://api.cerebras.ai/v1",
+    keyUrl:"https://cloud.cerebras.ai/", keyHint:"csk-…", corsDirect:false },
+  ondevice:   { id:"ondevice", label:"On-device (WebLLM, no key)", ondevice:true },
+};
+const CLOUD_IDS = ["openrouter","groq","google","cerebras"];
 
-async function send(){
-  if(controller){controller.abort();return;}
-  const text=input.value.trim();if(!text)return;
-  if(!cfg.key){openSettings();return;}
-  let c=cur();if(!c){newChat();c=cur();}
-  c.messages.push({role:"user",content:text});if(c.title==="New chat")c.title=text.slice(0,40);
-  input.value="";persist();render();
-  const ai={role:"assistant",content:"",model:null};const r=row(ai);msgs.appendChild(r);const cel=r.querySelector(".c");
-  setSending(true);controller=new AbortController();
-  const models=cfg.uncensored?cfg.unc:cfg.normal;
-  const apiMsgs=c.messages.map(m=>({role:m.role,content:m.content}));
-  let ok=false,err=null,st=null;
-  const status=t=>{if(!st){st=document.createElement("div");st.className="status";r.after(st);}st.textContent=t;};
-  for(let i=0;i<models.length;i++){
-    ai.content="";
-    try{
-      r.querySelector(".who").textContent="Assistant · "+models[i];
-      await stream(models[i],apiMsgs,ch=>{ai.content+=ch;cel.innerHTML=md(ai.content);msgs.scrollTop=msgs.scrollHeight;},controller.signal);
-      if(!ai.content.trim())throw new Error("empty");
-      ai.model=models[i];ok=true;if(st)st.remove();break;
-    }catch(e){err=e;if(e.name==="AbortError")break;if(i<models.length-1)status("⚠ "+models[i]+" failed — trying next…");}
+// Known model ids per cloud provider (used to populate the picker; OpenRouter is
+// replaced by its live free list). Users can add any custom id too.
+const KNOWN_MODELS = {
+  openrouter: ["meta-llama/llama-3.3-70b-instruct:free","qwen/qwen3-next-80b-a3b-instruct:free",
+    "google/gemma-4-31b-it:free","nvidia/nemotron-3-super-120b-a12b:free","deepseek/deepseek-chat-v3-0324:free"],
+  groq: ["llama-3.3-70b-versatile","llama-3.1-8b-instant","deepseek-r1-distill-llama-70b","gemma2-9b-it","qwen-2.5-32b"],
+  google: ["gemini-2.5-flash","gemini-2.5-flash-lite","gemini-2.0-flash","gemini-2.0-flash-lite"],
+  cerebras: ["llama-3.3-70b","llama3.1-8b","qwen-3-32b","llama-3.1-70b"],
+};
+// regex marking models we treat as "uncensored" (used by the mode toggle + tags)
+const UNC_RE = /dolphin|uncensored|venice|abliterat|nemo|mytho|toppy|lumimaid|rocinante|unslop|hermes|mistral/i;
+
+// On-device (WebLLM) catalogue. tag:"unc" = fewer refusals. Small ones run on phones.
+const WEBLLM_MODELS = [
+  {id:"Qwen2.5-0.5B-Instruct-q4f16_1-MLC",   name:"Qwen2.5 0.5B", meta:"~0.5 GB · tiny, phone-friendly", tag:"phone"},
+  {id:"Llama-3.2-1B-Instruct-q4f16_1-MLC",   name:"Llama 3.2 1B", meta:"~0.9 GB · fast, phone-friendly", tag:"phone"},
+  {id:"Qwen2.5-1.5B-Instruct-q4f16_1-MLC",   name:"Qwen2.5 1.5B", meta:"~1.1 GB · fast", tag:"fast"},
+  {id:"gemma-2-2b-it-q4f16_1-MLC",           name:"Gemma 2 2B",   meta:"~1.6 GB · fast", tag:"fast"},
+  {id:"Llama-3.2-3B-Instruct-q4f16_1-MLC",   name:"Llama 3.2 3B", meta:"~2.2 GB · balanced", tag:"balanced"},
+  {id:"Qwen2.5-3B-Instruct-q4f16_1-MLC",     name:"Qwen2.5 3B",   meta:"~2.0 GB · balanced", tag:"balanced"},
+  {id:"Phi-3.5-mini-instruct-q4f16_1-MLC",   name:"Phi-3.5 mini", meta:"~2.2 GB · reasoning", tag:"balanced"},
+  {id:"Hermes-3-Llama-3.2-3B-q4f16_1-MLC",   name:"Hermes 3 (3B)",meta:"~2.2 GB · uncensored-ish", tag:"unc"},
+  {id:"Mistral-7B-Instruct-v0.3-q4f16_1-MLC",name:"Mistral 7B",   meta:"~4.0 GB · uncensored-ish, strong", tag:"unc"},
+  {id:"Hermes-2-Pro-Llama-3-8B-q4f16_1-MLC", name:"Hermes 2 Pro 8B", meta:"~4.7 GB · uncensored-ish, best", tag:"unc"},
+];
+
+/* ======================= Storage / state ======================= */
+const LS = {
+  get:(k,d)=>{ try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v);}catch(e){return d;} },
+  set:(k,v)=>{ try{localStorage.setItem(k,JSON.stringify(v));}catch(e){} }
+};
+
+function defaultProviders(){
+  const old = LS.get("fc_webllm", "fallback"); // migrate old on-device mode
+  const cloud = CLOUD_IDS.map(id=>({id, enabled:true}));
+  const od = {id:"ondevice", enabled: old!=="off"};
+  return old==="primary" ? [od, ...cloud] : [...cloud, od];
+}
+function defaultModels(){
+  return {
+    openrouter: KNOWN_MODELS.openrouter.slice(),
+    groq: KNOWN_MODELS.groq.slice(0,3),
+    google: KNOWN_MODELS.google.slice(0,2),
+    cerebras: KNOWN_MODELS.cerebras.slice(0,2),
+  };
+}
+
+let cfg = {
+  keys: LS.get("fc_keys", (LS.get("fc_key","") ? {openrouter:LS.get("fc_key","")} : {})),
+  providers: LS.get("fc_providers", defaultProviders()),
+  models: LS.get("fc_models", (LS.get("fc_normal",null) ? {...defaultModels(), openrouter:LS.get("fc_normal")} : defaultModels())),
+  od:    LS.get("fc_od",    "Llama-3.2-3B-Instruct-q4f16_1-MLC"),
+  odUnc: LS.get("fc_od_unc","Hermes-3-Llama-3.2-3B-q4f16_1-MLC"),
+  uncensored: LS.get("fc_uncmode",false),
+  theme: LS.get("fc_theme","dark"),
+};
+function persistCfg(){
+  LS.set("fc_keys",cfg.keys); LS.set("fc_providers",cfg.providers); LS.set("fc_models",cfg.models);
+  LS.set("fc_od",cfg.od); LS.set("fc_od_unc",cfg.odUnc);
+  LS.set("fc_uncmode",cfg.uncensored); LS.set("fc_theme",cfg.theme);
+}
+
+let chats = LS.get("fc_chats",[]);
+let currentId = LS.get("fc_current",null);
+// Groups (projects): each holds a system prompt shared by all its chats.
+let groups = LS.get("fc_groups", null);
+if(!groups){
+  groups=[{id:"g_default",name:"General",sys:"",collapsed:false}];
+  chats.forEach(c=>{ if(!c.groupId) c.groupId="g_default"; });
+}
+chats.forEach(c=>{ if(!c.groupId || !groups.find(g=>g.id===c.groupId)) c.groupId=groups[0].id; });
+let currentGroupId = LS.get("fc_currentGroup", groups[0].id);
+if(!groups.find(g=>g.id===currentGroupId)) currentGroupId=groups[0].id;
+let editGroupId = null;
+let controller = null;
+let USE_PROXY = false;
+let serverKeys = {};          // {providerId:true} from /api/models
+let LIVE = [];                // live OpenRouter free model ids
+
+/* ======================= Elements ======================= */
+const $ = s=>document.querySelector(s);
+const messagesEl=$("#messages"), historyEl=$("#history"), inputEl=$("#input"),
+      sendBtn=$("#send"), modeLabel=$("#modeLabel"), uncToggle=$("#uncToggle"), modal=$("#modal");
+
+/* ======================= Init ======================= */
+async function init(){
+  document.documentElement.setAttribute("data-theme",cfg.theme);
+  if(matchMedia("(max-width:720px)").matches) $("#sidebar").classList.add("collapsed");
+  uncToggle.checked=cfg.uncensored; updateModeLabel();
+  if(currentId===null || !chats.find(c=>c.id===currentId)) currentId = chats[0]?.id ?? null;
+  renderHistory(); renderMessages(); updateGroupBtn();
+  await detectMode();
+  healOpenRouter();
+  updateHint();
+  if(!hasUsableProvider()) openSettings();
+}
+
+async function detectMode(){
+  try{
+    const r=await fetch("api/models",{cache:"no-store"});
+    if(r.ok){ USE_PROXY=true; const j=await r.json(); LIVE=j.models||[]; serverKeys=j.providers||{}; return; }
+  }catch(e){}
+  USE_PROXY=false; serverKeys={};
+  try{
+    const r=await fetch("https://openrouter.ai/api/v1/models");
+    const j=await r.json();
+    LIVE=(j.data||[]).filter(m=>typeof m.id==="string"&&m.id.endsWith(":free")).map(m=>m.id);
+  }catch(e){ LIVE=[]; }
+}
+// Drop any dead OpenRouter models from the saved list; if it empties, refill from live.
+function healOpenRouter(){
+  if(!LIVE.length) return;
+  const cur=cfg.models.openrouter||[];
+  const valid=cur.filter(m=>LIVE.includes(m));
+  cfg.models.openrouter = valid.length ? valid : rankOR(LIVE).slice(0,6);
+  persistCfg();
+}
+function rankOR(list){
+  const pref=["llama-3.3-70b","qwen3-next","deepseek-chat","gemma-4","nemotron-3-super","qwen","gemini"];
+  const s=list.map(id=>{let r=pref.length;for(let i=0;i<pref.length;i++)if(id.includes(pref[i])){r=i;break;}return{id,r};});
+  s.sort((a,b)=>a.r-b.r); return s.map(x=>x.id);
+}
+function availFor(pid){
+  const base = pid==="openrouter" ? (LIVE.length?LIVE:KNOWN_MODELS.openrouter) : (KNOWN_MODELS[pid]||[]);
+  // include already-selected custom ids so they remain visible
+  return [...new Set([...(cfg.models[pid]||[]), ...base])];
+}
+
+/* ======================= Fallback chain ======================= */
+function providerUsable(pid){
+  if(pid==="ondevice") return webgpuOK();
+  return (USE_PROXY && serverKeys[pid]) || !!cfg.keys[pid];
+}
+function hasUsableProvider(){ return cfg.providers.some(p=>p.enabled && providerUsable(p.id)); }
+function activeChain(){
+  let order = cfg.providers.filter(p=>p.enabled).map(p=>p.id);
+  // In uncensored mode, prefer on-device (the only reliably-uncensored engine).
+  if(cfg.uncensored && order.includes("ondevice")) order=["ondevice",...order.filter(x=>x!=="ondevice")];
+  return order;
+}
+function modelsForProvider(pid){
+  let list = (cfg.models[pid]&&cfg.models[pid].length) ? cfg.models[pid].slice() : (KNOWN_MODELS[pid]||[]);
+  if(cfg.uncensored){ const f=list.filter(m=>UNC_RE.test(m)); if(f.length) list=f; }
+  return list;
+}
+function odModel(){ return cfg.uncensored ? cfg.odUnc : cfg.od; }
+
+/* ======================= Chats ======================= */
+function currentChat(){ return chats.find(c=>c.id===currentId); }
+function newChat(){
+  const id="c"+Date.now()+Math.floor(Math.random()*1000);
+  chats.unshift({id,title:"New chat",messages:[],groupId:currentGroupId});
+  currentId=id; persist(); renderHistory(); renderMessages(); updateGroupBtn(); inputEl.focus();
+}
+function ensureChat(){ if(!currentChat()) newChat(); return currentChat(); }
+function persist(){ LS.set("fc_chats",chats); LS.set("fc_current",currentId); LS.set("fc_groups",groups); LS.set("fc_currentGroup",currentGroupId); }
+
+/* ---------- Groups (projects) ---------- */
+function newGroup(){
+  const id="g"+Date.now()+Math.floor(Math.random()*1000);
+  groups.unshift({id,name:"New group",sys:"",collapsed:false});
+  currentGroupId=id; persist(); renderHistory(); openGroupModal(id);
+}
+function openGroupModal(gid){
+  const g=groups.find(x=>x.id===gid); if(!g) return;
+  editGroupId=gid;
+  $("#groupName").value=g.name;
+  $("#groupSys").value=g.sys||"";
+  $("#delGroup").style.display = groups.length>1 ? "" : "none";
+  $("#groupModal").classList.add("show");
+}
+function saveGroup(){
+  const g=groups.find(x=>x.id===editGroupId); if(!g) return;
+  g.name=$("#groupName").value.trim()||"Untitled";
+  g.sys=$("#groupSys").value;
+  persist(); $("#groupModal").classList.remove("show"); renderHistory(); updateGroupBtn();
+}
+function deleteGroup(){
+  if(groups.length<=1) return;
+  const gid=editGroupId, cnt=chats.filter(c=>c.groupId===gid).length;
+  if(!confirm(`Delete this group and its ${cnt} chat(s)?`)) return;
+  chats=chats.filter(c=>c.groupId!==gid);
+  groups=groups.filter(g=>g.id!==gid);
+  if(currentGroupId===gid) currentGroupId=groups[0].id;
+  if(!chats.find(c=>c.id===currentId)) currentId=chats[0]?.id??null;
+  persist(); $("#groupModal").classList.remove("show"); renderHistory(); renderMessages(); updateGroupBtn();
+}
+function updateGroupBtn(){
+  const c=currentChat();
+  const gid=c?c.groupId:currentGroupId;
+  const g=groups.find(x=>x.id===gid)||groups[0];
+  $("#groupBtnName").textContent=g?g.name:"—";
+  $("#groupBtn").onclick=()=>openGroupModal(g.id);
+}
+function deleteChat(id){
+  chats=chats.filter(c=>c.id!==id);
+  if(currentId===id) currentId=chats[0]?.id??null;
+  persist(); renderHistory(); renderMessages();
+}
+
+/* ======================= History / messages ======================= */
+function renderHistory(){
+  historyEl.innerHTML="";
+  for(const g of groups){
+    const chatsIn=chats.filter(c=>c.groupId===g.id);
+    const hasSys=g.sys&&g.sys.trim();
+    const groupEl=document.createElement("div"); groupEl.className="group";
+    const head=document.createElement("div"); head.className="group-head"+(g.id===currentGroupId?" active":"");
+    head.innerHTML=`<span class="gtwisty">${g.collapsed?"▸":"▾"}</span>
+      <span class="gname">${escapeHtml(g.name)}${hasSys?' <span class="gdot" title="has instructions">●</span>':''}</span>
+      <button class="gact gnew" title="New chat here">＋</button>
+      <button class="gact gedit" title="Edit instructions">✎</button>`;
+    head.querySelector(".gtwisty").onclick=e=>{ e.stopPropagation(); g.collapsed=!g.collapsed; persist(); renderHistory(); };
+    head.onclick=e=>{ if(e.target.closest(".gact")||e.target.classList.contains("gtwisty")) return; currentGroupId=g.id; persist(); renderHistory(); updateGroupBtn(); };
+    head.querySelector(".gnew").onclick=e=>{ e.stopPropagation(); currentGroupId=g.id; newChat(); closeSidebarOnMobile(); };
+    head.querySelector(".gedit").onclick=e=>{ e.stopPropagation(); openGroupModal(g.id); };
+    groupEl.appendChild(head);
+    if(!g.collapsed){
+      const cont=document.createElement("div"); cont.className="group-chats";
+      if(!chatsIn.length) cont.innerHTML='<div class="ghint">No chats yet</div>';
+      for(const c of chatsIn){
+        const item=document.createElement("div");
+        item.className="hist-item"+(c.id===currentId?" active":"");
+        item.innerHTML=`<span>💬</span><span class="title"></span><button class="del" title="Delete">✕</button>`;
+        item.querySelector(".title").textContent=c.title||"New chat";
+        item.onclick=e=>{ if(e.target.classList.contains("del"))return; currentId=c.id; currentGroupId=c.groupId; persist(); renderHistory(); renderMessages(); updateGroupBtn(); closeSidebarOnMobile(); };
+        item.querySelector(".del").onclick=e=>{ e.stopPropagation(); deleteChat(c.id); };
+        cont.appendChild(item);
+      }
+      groupEl.appendChild(cont);
+    }
+    historyEl.appendChild(groupEl);
   }
-  if(!ok&&!(controller.signal.aborted&&ai.content))ai.content="**All models failed.** "+(err?err.message:"")+" — check your key/models in ⚙.";
-  cel.innerHTML=md(ai.content);c.messages.push(ai);controller=null;setSending(false);persist();msgs.scrollTop=msgs.scrollHeight;
 }
-async function stream(model,messages,onCh,signal){
-  const res=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+cfg.key,"HTTP-Referer":location.origin,"X-Title":"FreeChat"},body:JSON.stringify({model,messages,stream:true}),signal});
-  if(!res.ok){let m="HTTP "+res.status;try{const j=await res.json();m=j?.error?.message||m;}catch(e){}throw new Error(m);}
-  const rd=res.body.getReader(),dec=new TextDecoder();let buf="";
-  while(true){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});const lines=buf.split("\\n");buf=lines.pop();
-    for(const l of lines){const t=l.trim();if(!t.startsWith("data:"))continue;const d=t.slice(5).trim();if(d==="[DONE]")return;try{const j=JSON.parse(d);const x=j.choices?.[0]?.delta?.content;if(x)onCh(x);}catch(e){}}}
+function welcomeHTML(){
+  return `<div class="welcome">
+    <h1>What can I help with?</h1>
+    <p>Free AI in your browser. Multiple providers with automatic fallback, plus an on-device model you can download. Toggle <b>Uncensored</b> top-right.</p>
+    <div class="suggestions">
+      <div class="sugg" data-q="Explain quantum entanglement like I'm five."><b>Explain a concept</b><span>quantum entanglement, simply</span></div>
+      <div class="sugg" data-q="Write a Python script to rename all files in a folder by date."><b>Write code</b><span>batch-rename files in Python</span></div>
+      <div class="sugg" data-q="Give me 5 creative names for a coffee shop and a tagline for each."><b>Brainstorm</b><span>coffee shop names + taglines</span></div>
+      <div class="sugg" data-q="Draft a polite email declining a meeting invitation."><b>Draft an email</b><span>decline a meeting politely</span></div>
+    </div>
+  </div>`;
 }
-function setSending(on){sendBtn.textContent=on?"■":"➤";sendBtn.classList.toggle("stop",on);}
-function openSettings(){$("#key").value=cfg.key;$("#normal").value=cfg.normal.join("\\n");$("#uncm").value=cfg.unc.join("\\n");modal.classList.add("show");}
-$("#save").onclick=()=>{cfg.key=$("#key").value.trim();cfg.normal=$("#normal").value.split("\\n").map(s=>s.trim()).filter(Boolean);cfg.unc=$("#uncm").value.split("\\n").map(s=>s.trim()).filter(Boolean);if(!cfg.normal.length)cfg.normal=DEFAULT_NORMAL;if(!cfg.unc.length)cfg.unc=DEFAULT_UNC;LS.set("k",cfg.key);LS.set("n",cfg.normal);LS.set("u",cfg.unc);modal.classList.remove("show");};
+function renderMessages(){
+  const chat=currentChat();
+  if(!chat || !chat.messages.length){
+    messagesEl.innerHTML=welcomeHTML();
+    messagesEl.querySelectorAll(".sugg").forEach(s=>s.onclick=()=>{ inputEl.value=s.dataset.q; send(); });
+    return;
+  }
+  messagesEl.innerHTML="";
+  for(const m of chat.messages) messagesEl.appendChild(msgEl(m));
+  scrollDown(); updateGroupBtn();
+}
+function msgEl(m){
+  const row=document.createElement("div"); row.className="msg-row";
+  const isUser=m.role==="user";
+  const who=isUser?"You":("Assistant"+(m.model?` · <span class="model">${escapeHtml(m.model)}</span>`:""));
+  row.innerHTML=`<div class="avatar ${isUser?'user':'ai'}">${isUser?'U':'AI'}</div>
+    <div class="msg-body"><div class="who">${who}</div>
+    <div class="content">${isUser?escapeHtml(m.content).replace(/\n/g,"<br>"):renderMarkdown(m.content)}</div></div>`;
+  wireCopy(row); return row;
+}
+function scrollDown(){ messagesEl.scrollTop=messagesEl.scrollHeight; }
+
+/* ======================= Send / fallback / streaming ======================= */
+async function send(){
+  if(controller){ controller.abort(); return; }
+  const text=inputEl.value.trim();
+  if(!text) return;
+  if(!hasUsableProvider()){ openSettings(); return; }
+
+  const chat=ensureChat();
+  chat.messages.push({role:"user",content:text});
+  if(chat.title==="New chat") chat.title=text.slice(0,40);
+  inputEl.value=""; autosize(); persist(); renderHistory(); renderMessages();
+
+  const aiMsg={role:"assistant",content:"",model:null};
+  const row=msgEl(aiMsg); messagesEl.appendChild(row);
+  const contentEl=row.querySelector(".content"), whoEl=row.querySelector(".who");
+  contentEl.innerHTML='<span class="cursor"></span>'; scrollDown(); setSending(true);
+
+  const apiMessages=buildApiMessages(chat);
+  let statusEl=null;
+  const showStatus=t=>{ if(!statusEl){ statusEl=document.createElement("div"); statusEl.className="status-line"; row.after(statusEl);} statusEl.textContent=t; };
+  const reset=()=>{ aiMsg.content=""; contentEl.innerHTML='<span class="cursor"></span>'; };
+  const onChunk=chunk=>{ aiMsg.content+=chunk; contentEl.innerHTML=renderMarkdown(aiMsg.content)+'<span class="cursor"></span>'; wireCopy(row); scrollDown(); };
+
+  controller=new AbortController();
+  let succeeded=false,lastErr=null,anyConfigured=false;
+  const chain=activeChain();
+
+  outer:
+  for(const pid of chain){
+    if(controller.signal.aborted) break;
+    if(!providerUsable(pid)) continue;
+    anyConfigured=true;
+    const prov=PROVIDERS[pid];
+
+    if(pid==="ondevice"){
+      reset();
+      const wl=odModel();
+      try{
+        whoEl.innerHTML=`Assistant · <span class="model">on-device · ${escapeHtml(shortWL(wl))}</span>`;
+        await runWebLLM(wl, apiMessages, onChunk, controller.signal, showStatus);
+        if(aiMsg.content.trim()){ aiMsg.model="on-device · "+shortWL(wl); succeeded=true; if(statusEl) statusEl.remove(); break outer; }
+      }catch(e){ lastErr=e; if(e.name==="AbortError") break outer; }
+      continue;
+    }
+
+    const models=modelsForProvider(pid);
+    for(let j=0;j<models.length;j++){
+      const model=models[j];
+      reset();
+      try{
+        whoEl.innerHTML=`Assistant · <span class="model">${escapeHtml(prov.label)} · ${escapeHtml(short(model))}</span>`;
+        await streamProvider(pid, model, apiMessages, onChunk, controller.signal);
+        if(!aiMsg.content.trim()) throw new Error("empty response");
+        aiMsg.model=prov.label+" · "+short(model); succeeded=true; if(statusEl) statusEl.remove(); break outer;
+      }catch(e){
+        lastErr=e;
+        if(e.name==="AbortError") break outer;
+        // account-wide errors → stop trying this provider's other models, go to next provider
+        if([401,402,403,429].includes(e.status)){ showStatus(`⚠ ${prov.label}: ${e.message}. Trying next provider…`); break; }
+        if(j<models.length-1) showStatus(`⚠ ${short(model)} failed (${e.message}). Trying ${short(models[j+1])}…`);
+      }
+    }
+  }
+
+  if(!succeeded){
+    if(controller.signal.aborted && aiMsg.content){ /* keep partial */ }
+    else if(!anyConfigured) aiMsg.content=errorHelp({noConfig:true});
+    else aiMsg.content=errorHelp(lastErr);
+  }
+
+  contentEl.innerHTML=renderMarkdown(aiMsg.content); wireCopy(row);
+  chat.messages.push(aiMsg);
+  controller=null; setSending(false); persist(); scrollDown(); inputEl.focus();
+}
+
+function buildApiMessages(chat){
+  const msgs=[];
+  const g=groups.find(x=>x.id===chat.groupId);
+  const sys=(g&&g.sys||"").trim();
+  if(sys) msgs.push({role:"system",content:sys});
+  for(const m of chat.messages) msgs.push({role:m.role,content:m.content});
+  return msgs;
+}
+
+async function streamProvider(pid, model, messages, onChunk, signal){
+  const prov=PROVIDERS[pid];
+  let endpoint, headers={"Content-Type":"application/json"}, body={model,messages,stream:true};
+  if(USE_PROXY && serverKeys[pid]){
+    endpoint="api/chat"; body.provider=pid;
+  }else{
+    const key=cfg.keys[pid];
+    if(!key) throw new Error("no key configured");
+    endpoint=prov.baseUrl.replace(/\/+$/,"")+"/chat/completions";
+    headers["Authorization"]="Bearer "+key;
+    if(pid==="openrouter"){ headers["HTTP-Referer"]=location.origin; headers["X-Title"]="AL-AI"; }
+  }
+  const res=await fetch(endpoint,{method:"POST",headers,body:JSON.stringify(body),signal});
+  if(!res.ok){
+    let msg="HTTP "+res.status;
+    try{ const j=await res.json(); msg=j?.error?.message||msg; }catch(e){}
+    const err=new Error(msg); err.status=res.status; err.retryAfter=res.headers.get("retry-after"); throw err;
+  }
+  const reader=res.body.getReader(), dec=new TextDecoder(); let buf="";
+  while(true){
+    const {done,value}=await reader.read(); if(done) break;
+    buf+=dec.decode(value,{stream:true});
+    const lines=buf.split("\n"); buf=lines.pop();
+    for(const line of lines){
+      const l=line.trim(); if(!l.startsWith("data:")) continue;
+      const data=l.slice(5).trim(); if(data==="[DONE]") return;
+      try{
+        const j=JSON.parse(data);
+        if(j.error){ const e=new Error(j.error.message||"stream error"); e.status=j.error.code; throw e; }
+        const delta=j.choices?.[0]?.delta?.content; if(delta) onChunk(delta);
+      }catch(e){ if(e.status!==undefined) throw e; }
+    }
+  }
+}
+
+function errorHelp(err){
+  if(err&&err.noConfig){
+    return "### ⚙ No engine configured\nOpen **⚙ Settings** and do one of:\n"+
+      "- Add an API key for any provider (OpenRouter, Groq, Google, Cerebras), **or**\n"+
+      "- Enable **On-device** and download a model (no key, works offline)"+(webgpuOK()?"":" — *this browser has no WebGPU, so on-device isn't available here*")+".";
+  }
+  const s=err?.status;
+  if(s===429) return "### ⏳ Rate-limited (429)\nEvery configured provider is rate-limited right now.\n\n**Fix:** wait ~30s, add another provider's free key in ⚙ Settings, or enable **On-device** as a fallback (no limits).";
+  if(s===402) return "### 💳 Out of credits (402)\nA model needs credits. Use `:free` / free-tier models, or add another provider.";
+  if(s===401||s===403) return "### 🔑 Auth problem ("+s+")\nA provider key is missing or invalid. Check the keys in ⚙ Settings.";
+  return "### ⚠ All providers failed\n"+(err?`Last error: \`${escapeHtml(err.message)}\`.\n\n`:"")+
+    "Open ⚙ Settings — check keys/models, or enable **On-device**.";
+}
+
+/* ======================= On-device (WebLLM) ======================= */
+let _webllm=null, _engine=null, _engineModel=null;
+function webgpuOK(){ return typeof navigator!=="undefined" && !!navigator.gpu; }
+async function loadWebLLM(){
+  if(_webllm) return _webllm;
+  _webllm=await import("https://esm.run/@mlc-ai/web-llm");
+  return _webllm;
+}
+async function runWebLLM(model, messages, onChunk, signal, onStatus){
+  if(!webgpuOK()) throw new Error("no WebGPU in this browser");
+  const w=await loadWebLLM();
+  if(!_engine || _engineModel!==model){
+    onStatus("⬇ Loading on-device model — first run downloads it once, then it's cached…");
+    _engine=await w.CreateMLCEngine(model,{initProgressCallback:p=>onStatus("⬇ "+(p.text||"loading…"))});
+    _engineModel=model;
+  }
+  onStatus("🖥 Generating on your device…");
+  const stream=await _engine.chat.completions.create({messages,stream:true,temperature:0.7});
+  let got=false;
+  for await (const chunk of stream){
+    if(signal.aborted){ try{await _engine.interruptGenerate();}catch(e){} break; }
+    const delta=chunk.choices?.[0]?.delta?.content; if(delta){ got=true; onChunk(delta); }
+  }
+  if(!got && !signal.aborted) throw new Error("on-device model returned nothing");
+}
+// Build the on-device catalogue from WebLLM's live prebuilt list (with real sizes),
+// so any small/uncensored model that exists shows up. Falls back to the curated list.
+async function getOnDeviceCatalog(){
+  try{
+    const w=await loadWebLLM();
+    const list=(w.prebuiltAppConfig&&w.prebuiltAppConfig.model_list)||[];
+    const cat=list
+      .filter(m=>m.model_id && /instruct|chat|hermes|-it|_it|mistral|qwen|llama|gemma|phi|smollm|nous|wizard/i.test(m.model_id) && !/embed|whisper/i.test(m.model_id))
+      .map(m=>{
+        const vram=m.vram_required_MB||0;
+        const gb=vram?(vram/1024).toFixed(1)+" GB":"size ?";
+        const unc=/hermes|dolphin|mistral|abliterat|uncensored|wizard|nous/i.test(m.model_id);
+        const phone=!!vram && vram<=1700;
+        const size=vram<=1700?"fast":(vram<=2800?"balanced":"large");   // size bucket
+        return {id:m.model_id,name:shortWL(m.model_id),meta:gb+(m.low_resource_required?" · low-RAM":"")+(phone?" · phone-OK":""),tag:size,size,phone,unc,vram};
+      })
+      .sort((a,b)=>(a.vram||9e9)-(b.vram||9e9));
+    return cat.length?cat:fallbackCatalog();
+  }catch(e){ return fallbackCatalog(); }
+}
+function fallbackCatalog(){ return WEBLLM_MODELS.map(m=>({...m, size:(m.tag==="unc"?"balanced":m.tag), phone:m.tag==="phone", unc:m.tag==="unc"})); }
+async function isInstalled(model){ try{ const w=await loadWebLLM(); return await w.hasModelInCache(model); }catch(e){ return false; } }
+async function removeModel(model){ const w=await loadWebLLM(); if(_engineModel===model){ _engine=null; _engineModel=null; } await w.deleteModelInCache(model); }
+async function downloadModel(model, onStatus){
+  const w=await loadWebLLM();
+  _engine=await w.CreateMLCEngine(model,{initProgressCallback:p=>onStatus(p.text||"downloading…")});
+  _engineModel=model;
+}
+
+/* ======================= Markdown (self-contained, XSS-safe) ======================= */
+function escapeHtml(s){ return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function renderMarkdown(src){
+  if(!src) return "";
+  const codeBlocks=[];
+  src=src.replace(/```(\w*)\n?([\s\S]*?)```/g,(_,lang,code)=>{
+    const i=codeBlocks.length;
+    codeBlocks.push(`<pre><button class="copy">copy</button><code class="lang-${escapeHtml(lang)}">${escapeHtml(code.replace(/\n$/,""))}</code></pre>`);
+    return ` CODE${i} `;
+  });
+  let out=escapeHtml(src);
+  out=out.replace(/^### (.*)$/gm,"<h3>$1</h3>").replace(/^## (.*)$/gm,"<h2>$1</h2>").replace(/^# (.*)$/gm,"<h1>$1</h1>");
+  out=out.replace(/^&gt; (.*)$/gm,"<blockquote>$1</blockquote>");
+  out=out.replace(/`([^`\n]+)`/g,"<code>$1</code>");
+  out=out.replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>").replace(/(^|[^*])\*([^*\n]+)\*/g,"$1<em>$2</em>");
+  out=out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  out=out.replace(/^(?:[-*] .*(?:\n|$))+/gm,b=>"<ul>"+b.trim().split("\n").map(l=>"<li>"+l.replace(/^[-*] /,"")+"</li>").join("")+"</ul>");
+  out=out.replace(/^(?:\d+\. .*(?:\n|$))+/gm,b=>"<ol>"+b.trim().split("\n").map(l=>"<li>"+l.replace(/^\d+\. /,"")+"</li>").join("")+"</ol>");
+  out=out.split(/\n{2,}/).map(b=>{ const t=b.trim(); if(!t) return "";
+    if(/^<(h[1-3]|ul|ol|pre|blockquote)/.test(t)) return t; if(t.startsWith(" CODE")) return t;
+    return "<p>"+t.replace(/\n/g,"<br>")+"</p>"; }).join("");
+  out=out.replace(/ CODE(\d+) /g,(_,i)=>codeBlocks[+i]);
+  return out;
+}
+function wireCopy(root){
+  root.querySelectorAll("pre .copy").forEach(btn=>{
+    if(btn._wired) return; btn._wired=true;
+    btn.onclick=()=>{ const code=btn.parentElement.querySelector("code").innerText;
+      navigator.clipboard.writeText(code); btn.textContent="copied!"; setTimeout(()=>btn.textContent="copy",1200); };
+  });
+}
+function short(m){ return m.split("/").pop().replace(":free",""); }
+function shortWL(m){ return m.replace(/-q4f16_1-MLC$|-q4f32_1-MLC$|-MLC$/,""); }
+
+/* ======================= Settings UI ======================= */
+function provBadge(pid){
+  if(pid==="ondevice") return webgpuOK()?{c:"ok",t:"WebGPU ready"}:{c:"cors",t:"no WebGPU here"};
+  if(USE_PROXY && serverKeys[pid]) return {c:"ok",t:"server key ✓"};
+  if(cfg.keys[pid]) return {c:"ok",t:"your key ✓"};
+  if(!USE_PROXY && !PROVIDERS[pid].corsDirect) return {c:"cors",t:"needs Vercel proxy"};
+  return {c:"key",t:"add a key"};
+}
+
+function openSettings(){ renderProviders(); modal.classList.add("show"); }
+
+function renderProviders(){
+  const box=$("#providersBox"); box.innerHTML="";
+  for(const entry of cfg.providers) box.appendChild(buildProviderCard(entry));
+  enableDnD(box, ()=>{ // reorder cfg.providers to match DOM
+    const order=[...box.querySelectorAll(".prov-row")].map(r=>r.dataset.val);
+    cfg.providers.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
+    persistCfg(); updateHint();
+  });
+}
+function moveProvider(id, dir){
+  const i=cfg.providers.findIndex(p=>p.id===id), j=i+dir;
+  if(j<0||j>=cfg.providers.length) return;
+  const a=cfg.providers; [a[i],a[j]]=[a[j],a[i]];
+  persistCfg(); renderProviders(); updateHint();
+}
+function buildProviderCard(entry){
+  const pid=entry.id, prov=PROVIDERS[pid], b=provBadge(pid);
+  const row=document.createElement("div");
+  row.className="prov-row"+(entry.enabled?"":" disabled"); row.dataset.val=pid;
+  row.innerHTML=`
+    <div class="prov-head">
+      <span class="drag-h" draggable="true" title="Drag to reorder">⠿</span>
+      <div class="ord"><button class="up">▲</button><button class="down">▼</button></div>
+      <label class="chk"><input type="checkbox" class="en" ${entry.enabled?"checked":""}> ${escapeHtml(prov.label)}</label>
+      <span class="prov-state ${b.c}">${b.t}</span>
+    </div>
+    <div class="prov-body"></div>`;
+  const body=row.querySelector(".prov-body");
+  row.querySelector(".up").onclick=()=>moveProvider(pid,-1);
+  row.querySelector(".down").onclick=()=>moveProvider(pid,1);
+  row.querySelector(".en").onchange=e=>{ entry.enabled=e.target.checked; row.classList.toggle("disabled",!entry.enabled); persistCfg(); updateHint(); };
+
+  if(pid==="ondevice"){ buildOnDeviceBody(body); }
+  else { buildCloudBody(pid, prov, body); }
+  return row;
+}
+function buildCloudBody(pid, prov, body){
+  const needKey = !(USE_PROXY && serverKeys[pid]);
+  body.innerHTML = `
+    ${ needKey ? `<input type="password" class="pkey" placeholder="${prov.keyHint} — your key (stored in this browser)" value="${escapeHtml(cfg.keys[pid]||"")}">` : "" }
+    <button class="disclose">▸ Models (${(cfg.models[pid]||[]).length} selected) — pick &amp; reorder</button>
+    <div class="picker" style="display:none"></div>
+    <div class="prov-note">Free key: <a class="link" href="${prov.keyUrl}" target="_blank" rel="noopener">${prov.keyUrl.replace(/^https?:\/\//,"")}</a>${(!USE_PROXY&&!prov.corsDirect)?" · ⚠ direct browser calls blocked by CORS — deploy to Vercel and use its server key.":""}</div>`;
+  if(needKey){
+    body.querySelector(".pkey").oninput=e=>{ const v=e.target.value.trim(); if(v) cfg.keys[pid]=v; else delete cfg.keys[pid]; persistCfg(); };
+    body.querySelector(".pkey").onblur=()=>{ // refresh badge
+      const badge=body.closest(".prov-row").querySelector(".prov-state"); const b=provBadge(pid);
+      badge.className="prov-state "+b.c; badge.textContent=b.t; updateHint();
+    };
+  }
+  const picker=body.querySelector(".picker"), disc=body.querySelector(".disclose");
+  disc.onclick=()=>{ const open=picker.style.display!=="none"; picker.style.display=open?"none":"block"; disc.textContent=(open?"▸":"▾")+disc.textContent.slice(1); if(!open&&!picker._built){ renderPicker(pid,picker); picker._built=true; } };
+}
+
+function renderPicker(pid, picker){
+  picker.innerHTML=`
+    <div class="plabel">Selected — fallback order (drag ⠿ or ▲▼)</div>
+    <div class="sel-list"></div>
+    <input class="avail-search field" type="text" placeholder="Search models to add…">
+    <div class="plabel">Available — click to add</div>
+    <div class="avail"></div>
+    <div class="customrow"><input class="custom" type="text" placeholder="…or paste a custom model id"><button class="btn sm add">Add</button></div>`;
+  const selList=picker.querySelector(".sel-list"), availBox=picker.querySelector(".avail");
+  const refresh=()=>{ renderSelList(pid,selList); renderAvail(pid,availBox,picker.querySelector(".avail-search").value); };
+  picker._refresh=refresh;
+  refresh();
+  picker.querySelector(".avail-search").oninput=e=>renderAvail(pid,availBox,e.target.value);
+  const custom=picker.querySelector(".custom");
+  const addCustom=()=>{ const v=custom.value.trim(); if(!v) return; if(!cfg.models[pid]) cfg.models[pid]=[]; if(!cfg.models[pid].includes(v)) cfg.models[pid].push(v); custom.value=""; persistCfg(); refresh(); bumpCount(pid,picker); };
+  picker.querySelector(".add").onclick=addCustom;
+  custom.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); addCustom(); } };
+}
+function bumpCount(pid,picker){ const disc=picker.previousElementSibling; if(disc&&disc.classList.contains("disclose")) disc.textContent=`▾ Models (${(cfg.models[pid]||[]).length} selected) — pick & reorder`; }
+function renderSelList(pid, selList){
+  const list=cfg.models[pid]||[]; selList.innerHTML="";
+  if(!list.length){ selList.innerHTML='<div class="sel-empty">None selected — add from the list below.</div>'; }
+  list.forEach(m=>{
+    const it=document.createElement("div"); it.className="sel-item"; it.dataset.val=m; it.draggable=true;
+    it.innerHTML=`<span class="mv">⠿</span><span class="name">${escapeHtml(m)}${UNC_RE.test(m)?' <span class="tag unc">unc</span>':''}</span>
+      <button class="up btn sm">▲</button><button class="down btn sm">▼</button><button class="rm" title="Remove">✕</button>`;
+    it.querySelector(".rm").onclick=()=>{ cfg.models[pid]=list.filter(x=>x!==m); persistCfg(); renderSelList(pid,selList); const pk=selList.closest(".picker"); bumpCount(pid,pk); renderAvail(pid,pk.querySelector(".avail"),pk.querySelector(".avail-search").value); };
+    it.querySelector(".up").onclick=()=>moveModel(pid,m,-1,selList);
+    it.querySelector(".down").onclick=()=>moveModel(pid,m,1,selList);
+    selList.appendChild(it);
+  });
+  enableDnD(selList, ()=>{ cfg.models[pid]=[...selList.querySelectorAll(".sel-item")].map(e=>e.dataset.val); persistCfg(); });
+}
+function moveModel(pid,m,dir,selList){
+  const a=cfg.models[pid]; const i=a.indexOf(m), j=i+dir; if(j<0||j>=a.length) return;
+  [a[i],a[j]]=[a[j],a[i]]; persistCfg(); renderSelList(pid,selList);
+}
+function renderAvail(pid, availBox, q){
+  q=(q||"").toLowerCase();
+  const selected=new Set(cfg.models[pid]||[]);
+  const items=availFor(pid).filter(m=>!selected.has(m) && m.toLowerCase().includes(q)).slice(0,60);
+  availBox.innerHTML="";
+  if(!items.length){ availBox.innerHTML='<div class="sel-empty">No matches. Use the custom box below for any id.</div>'; return; }
+  for(const m of items){
+    const it=document.createElement("div"); it.className="avail-item"+(UNC_RE.test(m)?" unc":"");
+    it.innerHTML=`<span class="plus">＋</span><span class="name">${escapeHtml(m)}</span>`;
+    it.onclick=()=>{ if(!cfg.models[pid]) cfg.models[pid]=[]; cfg.models[pid].push(m); persistCfg();
+      const pk=availBox.closest(".picker"); renderSelList(pid,pk.querySelector(".sel-list")); renderAvail(pid,availBox,q); bumpCount(pid,pk); };
+    availBox.appendChild(it);
+  }
+}
+
+function buildOnDeviceBody(body){
+  body.innerHTML=`
+    <div class="prov-note">Runs fully in your browser via WebGPU — no key, no limits, works offline. Download once; it's cached (installed). ${webgpuOK()?"":"<b style='color:var(--danger)'>This browser has no WebGPU — try desktop Chrome/Edge, or Chrome on Android.</b>"}<br>
+    <b>Phone tip:</b> only models ≲1.7 GB (tick <i>phone-safe</i>) reliably run on a phone. Truly <span class="tag unc">unc</span> models start at ~2.2 GB — tick both filters to see if any fit your device.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <label style="flex:1;min-width:150px;font-size:12px">Active — Normal<br><select class="od-normal" style="margin-top:4px"></select></label>
+      <label style="flex:1;min-width:150px;font-size:12px">Active — Uncensored<br><select class="od-unc" style="margin-top:4px"></select></label>
+    </div>
+    <div style="display:flex;gap:10px 14px;align-items:center;margin:8px 0;flex-wrap:wrap">
+      <input class="od-search" type="text" placeholder="Search models…" style="flex:1;min-width:130px">
+      <label style="font-size:12px;display:flex;gap:5px;align-items:center">Size
+        <select class="od-size" style="width:auto;padding:4px 6px">
+          <option value="any">any</option>
+          <option value="fast">fast (≤1.7 GB)</option>
+          <option value="balanced">balanced (1.7–2.8 GB)</option>
+          <option value="large">large (&gt;2.8 GB)</option>
+        </select></label>
+    </div>
+    <div style="display:flex;gap:14px;align-items:center;margin:0 0 8px;flex-wrap:wrap">
+      <label style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" class="f-phone"> phone-safe 📱</label>
+      <label style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" class="f-unc"> uncensored</label>
+    </div>
+    <div class="od-list"><div class="sel-empty">Loading model catalogue…</div></div>`;
+  const listEl=body.querySelector(".od-list");
+  const nSel=body.querySelector(".od-normal"), uSel=body.querySelector(".od-unc");
+  const search=body.querySelector(".od-search"), fPhone=body.querySelector(".f-phone"), fUnc=body.querySelector(".f-unc"), fSize=body.querySelector(".od-size");
+  let catalog=[];
+  const draw=()=>{
+    const q=search.value.toLowerCase(), sz=fSize.value;
+    const items=catalog.filter(m=> m.id.toLowerCase().includes(q) && (!fPhone.checked||m.phone) && (!fUnc.checked||m.unc) && (sz==="any"||m.size===sz)).slice(0,60);
+    listEl.innerHTML="";
+    if(!items.length){ listEl.innerHTML='<div class="sel-empty">'+(fPhone.checked&&fUnc.checked?"No uncensored model is small enough to be phone-safe. Untick one filter.":"No matches — loosen the filters.")+'</div>'; return; }
+    for(const m of items) listEl.appendChild(buildOdRow(m));
+  };
+  const fill=cat=>{ catalog=cat;
+    const opts=cat.map(m=>`<option value="${m.id}">${escapeHtml(m.name)} — ${escapeHtml(m.meta)}</option>`).join("");
+    nSel.innerHTML=opts; uSel.innerHTML=opts;
+    if(cat.some(m=>m.id===cfg.od)) nSel.value=cfg.od;
+    if(cat.some(m=>m.id===cfg.odUnc)) uSel.value=cfg.odUnc;
+    draw();
+  };
+  nSel.onchange=e=>{ cfg.od=e.target.value; persistCfg(); };
+  uSel.onchange=e=>{ cfg.odUnc=e.target.value; persistCfg(); };
+  search.oninput=draw; fPhone.onchange=draw; fUnc.onchange=draw; fSize.onchange=draw;
+  if(webgpuOK()) getOnDeviceCatalog().then(fill);
+  else fill(WEBLLM_MODELS.map(m=>({...m,phone:m.tag==="phone",unc:m.tag==="unc"})));
+}
+function buildOdRow(m){
+  const row=document.createElement("div"); row.className="od-model";
+  row.innerHTML=`<div class="od-name"><b>${escapeHtml(m.name)}</b><span class="tag">${escapeHtml(m.tag||m.size||"")}</span>${m.unc?'<span class="tag unc">unc</span>':''}${m.phone?'<span class="tag">📱</span>':''}<div class="od-meta">${escapeHtml(m.meta)}</div></div>
+    <span class="od-badge no">checking…</span>
+    <button class="btn sm dl">Download</button>
+    <button class="btn sm rm" style="display:none">Remove</button>`;
+  const badge=row.querySelector(".od-badge"), dl=row.querySelector(".dl"), rm=row.querySelector(".rm");
+  const setState=inst=>{
+    if(inst){ badge.className="od-badge inst"; badge.textContent="Installed ✓"; dl.style.display="none"; rm.style.display=""; }
+    else { badge.className="od-badge no"; badge.textContent="Not downloaded"; dl.style.display=""; rm.style.display="none"; }
+  };
+  if(!webgpuOK()){ badge.className="od-badge no"; badge.textContent="unavailable"; dl.disabled=true; }
+  else { isInstalled(m.id).then(setState); }
+  dl.onclick=async()=>{ if(!webgpuOK()) return; badge.className="od-badge dl"; dl.disabled=true;
+    try{ await downloadModel(m.id, t=>{ badge.textContent="⬇ "+(t.length>22?t.slice(0,22)+"…":t); }); setState(true); }
+    catch(e){ badge.className="od-badge no"; badge.textContent="failed"; } finally{ dl.disabled=false; } };
+  rm.onclick=async()=>{ try{ await removeModel(m.id); setState(false); }catch(e){} };
+  return row;
+}
+
+/* Reusable drag-and-drop for [data-val] children */
+function enableDnD(container, onChange){
+  if(container._dnd) return; container._dnd=true;
+  let dragEl=null;
+  // Scope strictly to DIRECT children so nested sortable lists don't interfere.
+  container.addEventListener("dragstart",e=>{ const it=e.target.closest("[data-val]"); if(!it||it.parentElement!==container)return; dragEl=it; it.classList.add("drag"); e.dataTransfer.effectAllowed="move"; e.stopPropagation(); });
+  container.addEventListener("dragend",()=>{ if(dragEl){ dragEl.classList.remove("drag"); dragEl=null; onChange&&onChange(); } });
+  container.addEventListener("dragover",e=>{ if(!dragEl||dragEl.parentElement!==container)return; e.preventDefault();
+    const after=dndAfter(container,e.clientY);
+    if(after==null) container.appendChild(dragEl); else container.insertBefore(dragEl,after);
+  });
+}
+function dndAfter(container,y){
+  const els=[...container.querySelectorAll("[data-val]:not(.drag)")];
+  let best={o:-Infinity,el:null};
+  for(const c of els){ const box=c.getBoundingClientRect(); const o=y-box.top-box.height/2; if(o<0&&o>best.o) best={o,el:c}; }
+  return best.el;
+}
+
+function saveSettings(){ persistCfg(); modal.classList.remove("show"); updateHint(); }
+function updateModeLabel(){ if(cfg.uncensored){ modeLabel.textContent="Uncensored"; modeLabel.classList.add("unc"); } else { modeLabel.textContent="Normal"; modeLabel.classList.remove("unc"); } }
+function updateHint(){
+  const usable=cfg.providers.filter(p=>p.enabled&&providerUsable(p.id)).map(p=>PROVIDERS[p.id].label.split(" ")[0]);
+  const el=$("#hint");
+  el.textContent = usable.length
+    ? `Fallback: ${usable.join(" → ")} · history stays in your browser`
+    : "No engine set — open ⚙ Settings (add a key or download an on-device model)";
+}
+
+/* ======================= Composer / events ======================= */
+function autosize(){ inputEl.style.height="auto"; inputEl.style.height=Math.min(inputEl.scrollHeight,200)+"px"; }
+const isMobile=()=>matchMedia("(max-width:720px)").matches;
+function toggleSidebar(force){ const sb=$("#sidebar"); const willOpen=force!==undefined?force:sb.classList.contains("collapsed"); sb.classList.toggle("collapsed",!willOpen); $("#backdrop").classList.toggle("show",willOpen); }
+function closeSidebarOnMobile(){ if(isMobile()) toggleSidebar(false); }
+
+$("#newChat").onclick=()=>{ newChat(); closeSidebarOnMobile(); };
+$("#newGroup").onclick=newGroup;
+$("#saveGroup").onclick=saveGroup;
+$("#delGroup").onclick=deleteGroup;
+$("#groupModal").onclick=e=>{ if(e.target===$("#groupModal")) $("#groupModal").classList.remove("show"); };
+$("#menuBtn").onclick=()=>toggleSidebar();
+$("#backdrop").onclick=()=>toggleSidebar(false);
 $("#settingsBtn").onclick=openSettings;
-$("#newChat").onclick=newChat;
-$("#send").onclick=send;
-modal.onclick=e=>{if(e.target===modal)modal.classList.remove("show");};
-$("#unc").onchange=e=>{cfg.uncensored=e.target.checked;LS.set("um",cfg.uncensored);$("#modeLabel").textContent=cfg.uncensored?"Uncensored":"Normal";};
-input.onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}};
-$("#unc").checked=cfg.uncensored;$("#modeLabel").textContent=cfg.uncensored?"Uncensored":"Normal";
-render();if(!cfg.key)openSettings();
+$("#saveSettings").onclick=saveSettings;
+$("#resetAll").onclick=()=>{ if(!confirm("Reset providers, keys and model lists to defaults? (Your chats are kept.)")) return;
+  cfg.keys={}; cfg.providers=defaultProviders(); cfg.models=defaultModels(); healOpenRouter();
+  cfg.od="Llama-3.2-3B-Instruct-q4f16_1-MLC"; cfg.odUnc="Hermes-3-Llama-3.2-3B-q4f16_1-MLC"; persistCfg(); renderProviders(); updateHint(); };
+modal.onclick=e=>{ if(e.target===modal){ saveSettings(); } };
+$("#themeBtn").onclick=()=>{ cfg.theme=cfg.theme==="dark"?"light":"dark"; document.documentElement.setAttribute("data-theme",cfg.theme); LS.set("fc_theme",cfg.theme); };
+$("#clearAll").onclick=e=>{ e.preventDefault(); if(confirm("Delete ALL chats from this browser?")){ chats=[]; currentId=null; persist(); renderHistory(); renderMessages(); } };
+uncToggle.onchange=()=>{ cfg.uncensored=uncToggle.checked; LS.set("fc_uncmode",cfg.uncensored); updateModeLabel(); updateHint(); };
+sendBtn.onclick=send;
+inputEl.oninput=autosize;
+inputEl.onkeydown=e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); } };
+function setSending(on){ if(on){ sendBtn.textContent="■"; sendBtn.classList.add("stop"); sendBtn.title="Stop"; } else { sendBtn.textContent="➤"; sendBtn.classList.remove("stop"); sendBtn.title="Send"; } }
+
+init();
 </script>
 </body>
 </html>
