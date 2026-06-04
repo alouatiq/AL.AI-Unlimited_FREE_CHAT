@@ -238,7 +238,7 @@
 <div class="modal-bg" id="modal">
   <div class="modal">
     <h2>Settings</h2>
-    <p class="sub">Stored locally in your browser (localStorage). Priority per provider: <b>server key → your key → skip</b>. On-device needs no key.</p>
+    <p class="sub">Stored locally in your browser (localStorage). Priority per provider: <b>your own key (overrides) → shared server key → skip</b>. On-device needs no key.</p>
 
     <div class="field">
       <label>Providers &amp; fallback order</label>
@@ -648,16 +648,23 @@ function buildApiMessages(chat){
 
 async function streamProvider(pid, model, messages, onChunk, signal){
   const prov=PROVIDERS[pid];
+  const browserKey=cfg.keys[pid];
+  const serverAvail=USE_PROXY && serverKeys[pid];
+  // The user's own key OVERRIDES the shared server key — but only when a direct
+  // browser call actually works for this provider (CORS). Otherwise use the proxy.
+  const useBrowser = browserKey && (prov.corsDirect || !serverAvail);
   let endpoint, headers={"Content-Type":"application/json"}, body={model,messages,stream:true};
-  if(USE_PROXY && serverKeys[pid]){
-    endpoint="api/chat"; body.provider=pid;
-  }else{
-    const key=cfg.keys[pid];
-    if(!key) throw new Error("no key configured");
+  if(useBrowser){
     endpoint=prov.baseUrl.replace(/\/+$/,"")+"/chat/completions";
-    headers["Authorization"]="Bearer "+key;
+    headers["Authorization"]="Bearer "+browserKey;
     if(pid==="openrouter"){ headers["HTTP-Referer"]=location.origin; headers["X-Title"]="AL-AI"; }
-  }
+  }else if(serverAvail){
+    endpoint="api/chat"; body.provider=pid;
+  }else if(browserKey){
+    endpoint=prov.baseUrl.replace(/\/+$/,"")+"/chat/completions";
+    headers["Authorization"]="Bearer "+browserKey;
+    if(pid==="openrouter"){ headers["HTTP-Referer"]=location.origin; headers["X-Title"]="AL-AI"; }
+  }else throw new Error("no key configured");
   const res=await fetch(endpoint,{method:"POST",headers,body:JSON.stringify(body),signal});
   if(!res.ok){
     let msg="HTTP "+res.status;
@@ -786,8 +793,12 @@ function shortWL(m){ return m.replace(/-q4f16_1-MLC$|-q4f32_1-MLC$|-MLC$/,""); }
 /* ======================= Settings UI ======================= */
 function provBadge(pid){
   if(pid==="ondevice") return webgpuOK()?{c:"ok",t:"WebGPU ready"}:{c:"cors",t:"no WebGPU here"};
-  if(USE_PROXY && serverKeys[pid]) return {c:"ok",t:"server key ✓"};
-  if(cfg.keys[pid]) return {c:"ok",t:"your key ✓"};
+  const server=USE_PROXY && serverKeys[pid];
+  const mine=!!cfg.keys[pid];
+  const usesMine = mine && (PROVIDERS[pid].corsDirect || !server);
+  if(usesMine) return {c:"ok",t: server?"your key ✓ (overrides server)":"your key ✓"};
+  if(server) return {c:"ok",t:"server key ✓"};
+  if(mine) return {c:"ok",t:"your key ✓"};
   if(!USE_PROXY && !PROVIDERS[pid].corsDirect) return {c:"cors",t:"needs Vercel proxy"};
   return {c:"key",t:"add a key"};
 }
@@ -831,19 +842,19 @@ function buildProviderCard(entry){
   return row;
 }
 function buildCloudBody(pid, prov, body){
-  const needKey = !(USE_PROXY && serverKeys[pid]);
+  const hasServer = USE_PROXY && serverKeys[pid];
+  const ph = hasServer
+    ? `${prov.keyHint} — optional: your own key (used instead of the shared server key)`
+    : `${prov.keyHint} — your key (stored only in this browser)`;
   body.innerHTML = `
-    ${ needKey ? `<input type="password" class="pkey" placeholder="${prov.keyHint} — your key (stored in this browser)" value="${escapeHtml(cfg.keys[pid]||"")}">` : "" }
+    <input type="password" class="pkey" placeholder="${escapeHtml(ph)}" value="${escapeHtml(cfg.keys[pid]||"")}">
     <button class="disclose">▸ Models (${(cfg.models[pid]||[]).length} selected) — pick &amp; reorder</button>
     <div class="picker" style="display:none"></div>
-    <div class="prov-note">Free key: <a class="link" href="${prov.keyUrl}" target="_blank" rel="noopener">${prov.keyUrl.replace(/^https?:\/\//,"")}</a>${(!USE_PROXY&&!prov.corsDirect)?" · ⚠ direct browser calls blocked by CORS — deploy to Vercel and use its server key.":""}</div>`;
-  if(needKey){
-    body.querySelector(".pkey").oninput=e=>{ const v=e.target.value.trim(); if(v) cfg.keys[pid]=v; else delete cfg.keys[pid]; persistCfg(); };
-    body.querySelector(".pkey").onblur=()=>{ // refresh badge
-      const badge=body.closest(".prov-row").querySelector(".prov-state"); const b=provBadge(pid);
-      badge.className="prov-state "+b.c; badge.textContent=b.t; updateHint();
-    };
-  }
+    <div class="prov-note">Free key: <a class="link" href="${prov.keyUrl}" target="_blank" rel="noopener">${prov.keyUrl.replace(/^https?:\/\//,"")}</a>${hasServer?" · a shared server key is already set — leave blank to use it, or add your own to use your quota.":""}${(!USE_PROXY&&!prov.corsDirect)?" · ⚠ direct browser calls blocked by CORS — deploy to Vercel and use its server key.":""}</div>`;
+  const keyInput=body.querySelector(".pkey");
+  keyInput.oninput=e=>{ const v=e.target.value.trim(); if(v) cfg.keys[pid]=v; else delete cfg.keys[pid]; persistCfg(); };
+  keyInput.onblur=()=>{ const badge=body.closest(".prov-row").querySelector(".prov-state"); const b=provBadge(pid);
+    badge.className="prov-state "+b.c; badge.textContent=b.t; updateHint(); };
   const picker=body.querySelector(".picker"), disc=body.querySelector(".disclose");
   disc.onclick=()=>{ const open=picker.style.display!=="none"; picker.style.display=open?"none":"block"; disc.textContent=(open?"▸":"▾")+disc.textContent.slice(1); if(!open&&!picker._built){ renderPicker(pid,picker); picker._built=true; } };
 }
