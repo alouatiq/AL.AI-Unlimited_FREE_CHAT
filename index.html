@@ -51,7 +51,9 @@
   .side-foot{padding:12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
 
   /* Main */
-  #main{flex:1;display:flex;flex-direction:column;min-width:0}
+  #main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+  #dropzone{position:absolute;inset:8px;z-index:30;display:none;align-items:center;justify-content:center;background:var(--bg);opacity:.96;border:2px dashed var(--accent);border-radius:14px;font-size:18px;font-weight:600;color:var(--accent);pointer-events:none}
+  #dropzone.show{display:flex}
   .topbar{height:52px;flex-shrink:0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--bg)}
   .icon-btn{background:none;border:1px solid var(--border);color:var(--txt);width:34px;height:34px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px}
   .icon-btn:hover{background:var(--bg3)}
@@ -110,6 +112,19 @@
   #send:disabled{opacity:.4;cursor:not-allowed}
   #send.stop{background:var(--danger)}
   .composer-hint{max-width:820px;margin:6px auto 0;text-align:center;font-size:11px;color:var(--muted)}
+  #attachBtn{width:34px;height:38px;border:none;background:none;color:var(--muted);cursor:pointer;font-size:17px;flex-shrink:0}
+  #attachBtn:hover{color:var(--txt)}
+  /* Attachment chips (composer + messages) */
+  #attachBar{max-width:820px;margin:0 auto 6px;display:none;flex-wrap:wrap;gap:6px}
+  .att-chip{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:12px;max-width:220px}
+  .att-chip .att-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .att-chip .att-rm{border:none;background:none;color:var(--muted);cursor:pointer;font-size:13px}
+  .att-chip .att-rm:hover{color:var(--danger)}
+  .att-thumb{width:22px;height:22px;object-fit:cover;border-radius:4px;display:block}
+  .att-hint{font-size:11px;color:var(--warn);width:100%}
+  .msg-atts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+  .msg-thumb{max-width:180px;max-height:180px;border-radius:8px;border:1px solid var(--border)}
+  .att-chip.static{max-width:none}
 
   /* Modal */
   .modal-bg{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
@@ -224,12 +239,16 @@
   </div>
 
   <div id="messages"></div>
+  <div id="dropzone">⬇ Drop files to attach (images, PDF, text)</div>
 
   <div class="composer-wrap">
+    <div id="attachBar"></div>
     <div class="composer">
+      <button id="attachBtn" title="Attach files">📎</button>
       <textarea id="input" rows="1" placeholder="Message AL-AI…  (Enter to send, Shift+Enter for newline)"></textarea>
       <button id="send" title="Send">➤</button>
     </div>
+    <input type="file" id="fileInput" multiple hidden accept="image/*,application/pdf,text/*,.txt,.md,.csv,.json,.js,.ts,.py,.java,.c,.cpp,.cs,.go,.rs,.rb,.php,.html,.css,.xml,.yml,.yaml,.sh,.sql,.log">
     <div class="composer-hint" id="hint">Multi-provider fallback · nothing leaves your browser except the API call</div>
   </div>
 </div>
@@ -369,6 +388,7 @@ let currentGroupId = LS.get("fc_currentGroup", groups[0].id);
 if(!groups.find(g=>g.id===currentGroupId)) currentGroupId=groups[0].id;
 let editGroupId = null;
 let controller = null;
+let pendingAtts = [];        // files attached to the next message
 let USE_PROXY = false;
 let serverKeys = {};          // {providerId:true} from /api/models
 let LIVE = [];                // live OpenRouter free model ids
@@ -434,9 +454,16 @@ function activeChain(){
   if(cfg.uncensored && order.includes("ondevice")) order=["ondevice",...order.filter(x=>x!=="ondevice")];
   return order;
 }
-function modelsForProvider(pid){
+function modelsForProvider(pid, hasImage){
   let list = (cfg.models[pid]&&cfg.models[pid].length) ? cfg.models[pid].slice() : (KNOWN_MODELS[pid]||[]);
   if(cfg.uncensored){ const f=list.filter(m=>UNC_RE.test(m)); if(f.length) list=f; }
+  if(hasImage){ // try vision-capable models first so images/PDFs are actually read
+    let vision=[];
+    if(pid==="openrouter") vision=(LIVE.length?LIVE:list).filter(m=>/vl|vision|gemini|gpt-4|llava|qwen.*vl/i.test(m));
+    else if(pid==="groq") vision=["meta-llama/llama-4-scout-17b-16e-instruct","llama-3.2-90b-vision-preview","llama-3.2-11b-vision-preview"];
+    else if(pid==="google") vision=["gemini-2.5-flash","gemini-2.0-flash"]; // Gemini is multimodal
+    list=[...new Set([...vision, ...list])];
+  }
   return list;
 }
 function odModel(){ return cfg.uncensored ? cfg.odUnc : cfg.od; }
@@ -555,8 +582,13 @@ function msgEl(m){
   const row=document.createElement("div"); row.className="msg-row";
   const isUser=m.role==="user";
   const who=isUser?"You":("Assistant"+(m.model?` · <span class="model">${escapeHtml(m.model)}</span>`:""));
+  const atts=m.attachments||[];
+  const attHtml = atts.length ? `<div class="msg-atts">${atts.map(a=>
+      a.kind==="image" ? `<img src="${a.data}" class="msg-thumb" alt="${escapeHtml(a.name)}">`
+      : `<span class="att-chip static">${a.kind==="pdf"?"📄":"📃"} ${escapeHtml(a.name)}</span>`
+    ).join("")}</div>` : "";
   row.innerHTML=`<div class="avatar ${isUser?'user':'ai'}">${isUser?'U':'AI'}</div>
-    <div class="msg-body"><div class="who">${who}</div>
+    <div class="msg-body"><div class="who">${who}</div>${attHtml}
     <div class="content">${isUser?escapeHtml(m.content).replace(/\n/g,"<br>"):renderMarkdown(m.content)}</div></div>`;
   wireCopy(row); return row;
 }
@@ -566,12 +598,13 @@ function scrollDown(){ messagesEl.scrollTop=messagesEl.scrollHeight; }
 async function send(){
   if(controller){ controller.abort(); return; }
   const text=inputEl.value.trim();
-  if(!text) return;
+  if(!text && !pendingAtts.length) return;
   if(!hasUsableProvider()){ openSettings(); return; }
 
   const chat=ensureChat();
-  chat.messages.push({role:"user",content:text});
-  if(chat.title==="New chat") chat.title=text.slice(0,40);
+  const atts=pendingAtts.slice(); pendingAtts=[]; renderAttachBar();
+  chat.messages.push({role:"user",content:text, attachments:atts.length?atts:undefined});
+  if(chat.title==="New chat") chat.title=(text||atts[0]?.name||"New chat").slice(0,40);
   inputEl.value=""; autosize(); persist(); renderHistory(); renderMessages();
 
   const aiMsg={role:"assistant",content:"",model:null};
@@ -579,7 +612,9 @@ async function send(){
   const contentEl=row.querySelector(".content"), whoEl=row.querySelector(".who");
   contentEl.innerHTML='<span class="cursor"></span>'; scrollDown(); setSending(true);
 
-  const apiMessages=buildApiMessages(chat);
+  const apiMsgsMedia=buildApiMessages(chat,true);  // cloud: send images/PDF as parts
+  const apiMsgsText =buildApiMessages(chat,false); // on-device: text only
+  const hasImage=chat.messages.some(m=>(m.attachments||[]).some(a=>a.kind==="image"||a.kind==="pdf"));
   let statusEl=null;
   const showStatus=t=>{ if(!statusEl){ statusEl=document.createElement("div"); statusEl.className="status-line"; row.after(statusEl);} statusEl.textContent=t; };
   const reset=()=>{ aiMsg.content=""; contentEl.innerHTML='<span class="cursor"></span>'; };
@@ -601,19 +636,19 @@ async function send(){
       const wl=odModel();
       try{
         whoEl.innerHTML=`Assistant · <span class="model">on-device · ${escapeHtml(shortWL(wl))}</span>`;
-        await runWebLLM(wl, apiMessages, onChunk, controller.signal, showStatus);
+        await runWebLLM(wl, apiMsgsText, onChunk, controller.signal, showStatus);
         if(aiMsg.content.trim()){ aiMsg.model="on-device · "+shortWL(wl); succeeded=true; if(statusEl) statusEl.remove(); break outer; }
       }catch(e){ lastErr=e; if(e.name==="AbortError") break outer; }
       continue;
     }
 
-    const models=modelsForProvider(pid);
+    const models=modelsForProvider(pid, hasImage);
     for(let j=0;j<models.length;j++){
       const model=models[j];
       reset();
       try{
         whoEl.innerHTML=`Assistant · <span class="model">${escapeHtml(prov.label)} · ${escapeHtml(short(model))}</span>`;
-        await streamProvider(pid, model, apiMessages, onChunk, controller.signal);
+        await streamProvider(pid, model, apiMsgsMedia, onChunk, controller.signal);
         if(!aiMsg.content.trim()) throw new Error("empty response");
         aiMsg.model=prov.label+" · "+short(model); succeeded=true; if(statusEl) statusEl.remove(); break outer;
       }catch(e){
@@ -637,13 +672,30 @@ async function send(){
   controller=null; setSending(false); persist(); scrollDown(); inputEl.focus();
 }
 
-function buildApiMessages(chat){
+function buildApiMessages(chat, allowMedia){
   const msgs=[];
   const g=groups.find(x=>x.id===chat.groupId);
   const sys=(g&&g.sys||"").trim();
   if(sys) msgs.push({role:"system",content:sys});
-  for(const m of chat.messages) msgs.push({role:m.role,content:m.content});
+  for(const m of chat.messages) msgs.push(messageToApi(m, allowMedia));
   return msgs;
+}
+// Convert a stored message (with optional attachments) to the API shape.
+function messageToApi(m, allowMedia){
+  const atts=m.attachments||[];
+  let text=m.content||"";
+  for(const a of atts) if(a.kind==="text") text+=`\n\n--- Attached file: ${a.name} ---\n${a.text}`;
+  const media=atts.filter(a=>a.kind==="image"||a.kind==="pdf");
+  if(allowMedia && media.length){
+    const parts=[{type:"text",text:text||"(see attached files)"}];
+    for(const a of media){
+      if(a.kind==="image") parts.push({type:"image_url",image_url:{url:a.data}});
+      else parts.push({type:"file",file:{filename:a.name,file_data:a.data}});
+    }
+    return {role:m.role,content:parts};
+  }
+  if(media.length) text+=`\n\n[Note: ${media.length} image/PDF attachment(s) not readable by this engine.]`;
+  return {role:m.role,content:text};
 }
 
 async function streamProvider(pid, model, messages, onChunk, signal){
@@ -1007,6 +1059,47 @@ function updateHint(){
     : "No engine set — open ⚙ Settings (add a key or download an on-device model)";
 }
 
+/* ======================= Attachments ======================= */
+function kindOf(file){
+  if((file.type||"").startsWith("image/")) return "image";
+  if(file.type==="application/pdf") return "pdf";
+  if((file.type||"").startsWith("text/") || /\.(txt|md|csv|json|js|ts|py|java|c|cpp|cs|go|rs|rb|php|html|css|xml|yml|yaml|sh|sql|log)$/i.test(file.name)) return "text";
+  return "other";
+}
+function readFile(file, kind){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onerror=()=>rej(new Error("read failed"));
+    if(kind==="text"){ r.onload=()=>res({name:file.name,kind,mime:file.type||"text/plain",text:String(r.result)}); r.readAsText(file); }
+    else { r.onload=()=>res({name:file.name,kind,mime:file.type,data:String(r.result)}); r.readAsDataURL(file); } // data URL
+  });
+}
+async function addFiles(fileList){
+  for(const file of Array.from(fileList)){
+    const kind=kindOf(file);
+    if(kind==="other"){ alert(`Skipped “${file.name}” — unsupported type (images, PDF, or text only).`); continue; }
+    if(file.size>10*1024*1024){ alert(`Skipped “${file.name}” — over 10 MB.`); continue; }
+    try{ pendingAtts.push(await readFile(file,kind)); renderAttachBar(); }catch(e){}
+  }
+}
+function renderAttachBar(){
+  const bar=$("#attachBar"); bar.innerHTML="";
+  if(!pendingAtts.length){ bar.style.display="none"; return; }
+  bar.style.display="flex";
+  pendingAtts.forEach((a,i)=>{
+    const chip=document.createElement("div"); chip.className="att-chip";
+    const icon = a.kind==="image" ? `<img src="${a.data}" class="att-thumb">` : `<span>${a.kind==="pdf"?"📄":"📃"}</span>`;
+    chip.innerHTML=`${icon}<span class="att-name">${escapeHtml(a.name)}</span><button class="att-rm" title="Remove">✕</button>`;
+    chip.querySelector(".att-rm").onclick=()=>{ pendingAtts.splice(i,1); renderAttachBar(); };
+    bar.appendChild(chip);
+  });
+  if(pendingAtts.some(a=>a.kind==="image"||a.kind==="pdf")){
+    const h=document.createElement("div"); h.className="att-hint";
+    h.textContent="ℹ Reading images/PDF needs a vision-capable model — the app tries vision models first, but not every free model supports it.";
+    bar.appendChild(h);
+  }
+}
+
 /* ======================= Composer / events ======================= */
 function autosize(){ inputEl.style.height="auto"; inputEl.style.height=Math.min(inputEl.scrollHeight,200)+"px"; }
 const isMobile=()=>matchMedia("(max-width:720px)").matches;
@@ -1032,6 +1125,19 @@ uncToggle.onchange=()=>{ cfg.uncensored=uncToggle.checked; LS.set("fc_uncmode",c
 sendBtn.onclick=send;
 inputEl.oninput=autosize;
 inputEl.onkeydown=e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); } };
+
+// Attach button + file input
+$("#attachBtn").onclick=()=>$("#fileInput").click();
+$("#fileInput").onchange=e=>{ addFiles(e.target.files); e.target.value=""; };
+// Paste images from clipboard
+inputEl.addEventListener("paste",e=>{ const f=[...(e.clipboardData?.files||[])]; if(f.length){ e.preventDefault(); addFiles(f); } });
+// Drag & drop anywhere
+let dragCount=0;
+const hasFiles=e=>e.dataTransfer&&Array.from(e.dataTransfer.types||[]).includes("Files");
+window.addEventListener("dragenter",e=>{ if(hasFiles(e)){ dragCount++; $("#dropzone").classList.add("show"); } });
+window.addEventListener("dragover",e=>{ if(hasFiles(e)) e.preventDefault(); });
+window.addEventListener("dragleave",e=>{ if(hasFiles(e)){ dragCount--; if(dragCount<=0){ dragCount=0; $("#dropzone").classList.remove("show"); } } });
+window.addEventListener("drop",e=>{ if(hasFiles(e)){ e.preventDefault(); dragCount=0; $("#dropzone").classList.remove("show"); addFiles(e.dataTransfer.files); } });
 function setSending(on){ if(on){ sendBtn.textContent="■"; sendBtn.classList.add("stop"); sendBtn.title="Stop"; } else { sendBtn.textContent="➤"; sendBtn.classList.remove("stop"); sendBtn.title="Send"; } }
 
 init();
