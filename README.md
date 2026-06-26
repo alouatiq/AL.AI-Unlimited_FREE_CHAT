@@ -6,6 +6,8 @@ A serverless AI chat app that runs on **free AI providers**, with:
 - ♻️ **Two-level fallback** — walks your provider order, and within each provider walks its model list, until one answers
 - 🎚 **Model picker** — pick & **drag-to-reorder** (▲▼ on mobile) each provider's models from a live/searchable list; add any custom id
 - 🖥 **On-device AI (WebLLM)** — download a model that runs fully in your browser via WebGPU: no key, no limits, works offline. Shows **install status** (Installed ✓ / Download / Remove). Small models run on phones.
+- 🎨 **Images** — a 🎨 button generates images (**Pollinations · FLUX**, free & keyless) or, when you attach a photo, edits/improves it (**Nano Banana** = `gemini-2.5-flash-image`, free Google key).
+- 📎 **Attachments** — 📎 / drag-drop / paste images, PDFs and text files into chat (vision models read images; text is inlined).
 - 🔀 **Normal / Uncensored toggle** — uncensored mode prioritises on-device (Hermes/Mistral) + uncensored cloud models
 - 🔄 **Self-healing OpenRouter list** — pulls the *live* free-model list so names never go stale
 - 💾 **History in the browser only** (localStorage) — nothing is stored on a server
