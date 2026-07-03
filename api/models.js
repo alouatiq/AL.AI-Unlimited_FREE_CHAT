@@ -10,6 +10,7 @@ export default async function handler() {
     groq: !!process.env.GROQ_API_KEY,
     google: !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
     cerebras: !!process.env.CEREBRAS_API_KEY,
+    huggingface: !!process.env.HF_TOKEN,
   };
 
   let models = [];

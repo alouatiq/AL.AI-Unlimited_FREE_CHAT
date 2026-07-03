@@ -116,6 +116,9 @@
   #attachBtn:hover,#imgBtn:hover{color:var(--txt)}
   #imgBtn.active{color:var(--accent)}
   .composer.imgmode{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  #imgBar{max-width:820px;margin:0 auto 6px;display:none;font-size:12px;color:var(--muted);align-items:center;gap:6px}
+  #imgBar.show{display:flex;flex-wrap:wrap}
+  #imgBar select{background:var(--bg);border:1px solid var(--border);color:var(--txt);border-radius:6px;padding:3px 6px;font-size:12px}
   /* Attachment chips (composer + messages) */
   #attachBar{max-width:820px;margin:0 auto 6px;display:none;flex-wrap:wrap;gap:6px}
   .att-chip{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:12px;max-width:220px}
@@ -244,6 +247,7 @@
   <div id="dropzone">⬇ Drop files to attach (images, PDF, text)</div>
 
   <div class="composer-wrap">
+    <div id="imgBar">🎨 <b>Image mode</b> · Style <select id="imgStyle"></select> · no image = generate, attach one = edit</div>
     <div id="attachBar"></div>
     <div class="composer">
       <button id="attachBtn" title="Attach files">📎</button>
@@ -266,6 +270,12 @@
       <label>Providers &amp; fallback order</label>
       <div class="desc">Drag <b>⠿</b> (or use ▲▼) to reorder. Tried top-to-bottom until one answers. Untick to disable. Expand a provider to choose &amp; reorder its models.</div>
       <div id="providersBox"></div>
+    </div>
+
+    <div class="field">
+      <label>Image engines 🎨 <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+      <div class="desc">Generating is free & keyless (Pollinations, style picker in 🎨 mode). Editing uses your <b>Google</b> key (🍌 Nano Banana). Add a free <a class="link" href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">Hugging Face token</a> for FLUX (generation) + Qwen-Image-Edit (editing, experimental) fallbacks.</div>
+      <input type="password" id="hfKey" placeholder="hf_… — Hugging Face token (optional)">
     </div>
 
     <div class="modal-actions">
@@ -327,6 +337,8 @@ const KNOWN_MODELS = {
 };
 // regex marking models we treat as "uncensored" (used by the mode toggle + tags)
 const UNC_RE = /dolphin|uncensored|venice|abliterat|nemo|mytho|toppy|lumimaid|rocinante|unslop|hermes|mistral/i;
+// Pollinations image styles (free, keyless)
+const POLLINATIONS_STYLES = ["flux","flux-realism","flux-3d","flux-anime","turbo"];
 
 // On-device (WebLLM) catalogue. tag:"unc" = fewer refusals. Small ones run on phones.
 const WEBLLM_MODELS = [
@@ -371,11 +383,12 @@ let cfg = {
   odUnc: LS.get("fc_od_unc","Hermes-3-Llama-3.2-3B-q4f16_1-MLC"),
   uncensored: LS.get("fc_uncmode",false),
   theme: LS.get("fc_theme","dark"),
+  imgStyle: LS.get("fc_imgstyle","flux"),           // Pollinations generation style
 };
 function persistCfg(){
   LS.set("fc_keys",cfg.keys); LS.set("fc_providers",cfg.providers); LS.set("fc_models",cfg.models);
   LS.set("fc_od",cfg.od); LS.set("fc_od_unc",cfg.odUnc);
-  LS.set("fc_uncmode",cfg.uncensored); LS.set("fc_theme",cfg.theme);
+  LS.set("fc_uncmode",cfg.uncensored); LS.set("fc_theme",cfg.theme); LS.set("fc_imgstyle",cfg.imgStyle);
 }
 
 let chats = LS.get("fc_chats",[]);
@@ -693,7 +706,7 @@ async function send(){
 /* ======================= Image generation / editing ======================= */
 function pollinationsURL(prompt){
   const seed=Math.floor(Math.random()*1e9);
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&model=flux&seed=${seed}`;
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&nologo=true&model=${encodeURIComponent(cfg.imgStyle||"flux")}&seed=${seed}`;
 }
 function preloadImg(url, signal){
   return new Promise((res,rej)=>{
@@ -703,24 +716,72 @@ function preloadImg(url, signal){
     im.src=url;
   });
 }
+function hfAvailable(){ return !!cfg.keys.hf || (USE_PROXY && serverKeys.huggingface); }
+function blobToDataURL(blob){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(String(r.result)); r.onerror=()=>rej(new Error("read failed")); r.readAsDataURL(blob); }); }
+async function hfCall(model, payload, signal){
+  const token=cfg.keys.hf;
+  let res;
+  if(USE_PROXY){ res=await fetch("api/hf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model,payload,token:token||undefined}),signal}); }
+  else{
+    if(!token) throw new Error("no Hugging Face token");
+    res=await fetch("https://api-inference.huggingface.co/models/"+model,{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify(payload),signal});
+  }
+  const ct=res.headers.get("content-type")||"";
+  if(!res.ok || ct.includes("json")){
+    let m="HTTP "+res.status; try{ const j=await res.json(); m=j.error||JSON.stringify(j); }catch(e){}
+    const err=new Error(typeof m==="string"?m:"HF error"); err.status=res.status; throw err;
+  }
+  return await blobToDataURL(await res.blob());
+}
+
 async function doImage(prompt, src, aiMsg, whoEl, showStatus, signal){
-  if(src){
-    whoEl.innerHTML=`Assistant · <span class="model">🍌 Nano Banana · gemini-2.5-flash-image</span>`;
-    showStatus("🍌 Editing with Nano Banana (Gemini 2.5 Flash Image)…");
-    const dataUrl=await geminiImageEdit(prompt||"Enhance and improve this image; increase sharpness and detail.", src, signal);
-    aiMsg.attachments=[{name:"edited.png",kind:"image",mime:"image/png",data:dataUrl}];
-    aiMsg.content=prompt?("🍌 "+prompt):"🍌 Edited image";
-    aiMsg.model="Nano Banana · gemini-2.5-flash-image";
-  } else {
-    if(!prompt) throw new Error("Type what image to generate.");
-    whoEl.innerHTML=`Assistant · <span class="model">🎨 Pollinations · FLUX</span>`;
-    showStatus("🎨 Generating image (Pollinations · FLUX)…");
+  if(src) return editImage(prompt, src, aiMsg, whoEl, showStatus, signal);
+  return generateImage(prompt, aiMsg, whoEl, showStatus, signal);
+}
+async function generateImage(prompt, aiMsg, whoEl, showStatus, signal){
+  if(!prompt) throw new Error("Type what image to generate.");
+  // 1) Pollinations (free, keyless)
+  try{
+    whoEl.innerHTML=`Assistant · <span class="model">🎨 Pollinations · ${escapeHtml(cfg.imgStyle)}</span>`;
+    showStatus(`🎨 Generating (Pollinations · ${cfg.imgStyle})…`);
     const url=pollinationsURL(prompt);
     await preloadImg(url, signal);
     aiMsg.attachments=[{name:"image.png",kind:"image",mime:"image/png",data:url}];
-    aiMsg.content="🎨 "+prompt;
-    aiMsg.model="Pollinations · FLUX";
+    aiMsg.content="🎨 "+prompt; aiMsg.model="Pollinations · "+cfg.imgStyle; return;
+  }catch(e){ if(e.name==="AbortError") throw e; if(!hfAvailable()) throw e; }
+  // 2) Hugging Face FLUX.1-schnell
+  whoEl.innerHTML=`Assistant · <span class="model">🎨 HuggingFace · FLUX.1-schnell</span>`;
+  showStatus("🎨 Pollinations failed — trying HuggingFace FLUX…");
+  const dataUrl=await hfCall("black-forest-labs/FLUX.1-schnell", {inputs:prompt}, signal);
+  aiMsg.attachments=[{name:"image.png",kind:"image",mime:"image/png",data:dataUrl}];
+  aiMsg.content="🎨 "+prompt; aiMsg.model="HuggingFace · FLUX.1-schnell";
+}
+async function editImage(prompt, src, aiMsg, whoEl, showStatus, signal){
+  const instr=prompt||"Enhance and improve this image; increase sharpness and detail.";
+  let lastErr;
+  // 1) Nano Banana (Gemini)
+  if(cfg.keys.google || (USE_PROXY && serverKeys.google)){
+    try{
+      whoEl.innerHTML=`Assistant · <span class="model">🍌 Nano Banana · gemini-2.5-flash-image</span>`;
+      showStatus("🍌 Editing with Nano Banana (Gemini 2.5 Flash Image)…");
+      const dataUrl=await geminiImageEdit(instr, src, signal);
+      aiMsg.attachments=[{name:"edited.png",kind:"image",mime:"image/png",data:dataUrl}];
+      aiMsg.content=prompt?("🍌 "+prompt):"🍌 Edited image"; aiMsg.model="Nano Banana · gemini-2.5-flash-image"; return;
+    }catch(e){ lastErr=e; if(e.name==="AbortError") throw e; }
   }
+  // 2) Qwen-Image-Edit via Hugging Face (experimental)
+  if(hfAvailable()){
+    try{
+      whoEl.innerHTML=`Assistant · <span class="model">🖌 Qwen-Image-Edit (HF)</span>`;
+      showStatus("🖌 Editing with Qwen-Image-Edit (Hugging Face)…");
+      const b64=(src.data.split(",")[1])||"";
+      const dataUrl=await hfCall("Qwen/Qwen-Image-Edit", {inputs:b64, parameters:{prompt:instr}}, signal);
+      aiMsg.attachments=[{name:"edited.png",kind:"image",mime:"image/png",data:dataUrl}];
+      aiMsg.content=prompt?("🖌 "+prompt):"🖌 Edited image"; aiMsg.model="Qwen-Image-Edit (HF)"; return;
+    }catch(e){ lastErr=e; if(e.name==="AbortError") throw e; }
+  }
+  if(lastErr) throw lastErr;
+  throw new Error("To edit images, add a free Google key (Nano Banana) or a Hugging Face token (Qwen-Image-Edit) in ⚙ Settings.");
 }
 async function geminiImageEdit(prompt, src, signal){
   const base64=(src.data.split(",")[1])||""; const mime=src.mime||"image/png";
@@ -751,8 +812,8 @@ async function geminiImageCall(model, prompt, base64, mime, signal){
 function imageErr(err){
   if(err&&err.name==="AbortError") return "";
   return "### ⚠ Image failed\n"+(err?`\`${escapeHtml(err.message)}\`\n\n`:"")+
-    "- **Generating** (no image attached) is keyless via Pollinations — retry in a moment.\n"+
-    "- **Editing** needs a free **Google AI Studio** key: add it under the *Google* provider in ⚙ Settings (or set `GEMINI_API_KEY` on the server).";
+    "- **Generating** is keyless via Pollinations — retry, or try a different Style. Add a **Hugging Face** token in ⚙ Settings for a FLUX fallback.\n"+
+    "- **Editing** needs a free **Google** key (Nano Banana) under the Google provider, or a **Hugging Face** token (Qwen-Image-Edit, experimental) — both in ⚙ Settings.";
 }
 
 function buildApiMessages(chat, allowMedia){
@@ -938,7 +999,7 @@ function provBadge(pid){
   return {c:"key",t:"add a key"};
 }
 
-function openSettings(){ renderProviders(); modal.classList.add("show"); }
+function openSettings(){ renderProviders(); $("#hfKey").value=cfg.keys.hf||""; modal.classList.add("show"); }
 
 function renderProviders(){
   const box=$("#providersBox"); box.innerHTML="";
@@ -1191,6 +1252,7 @@ function closeSidebarOnMobile(){ if(isMobile()) toggleSidebar(false); }
 
 $("#newChat").onclick=()=>{ newChat(); closeSidebarOnMobile(); };
 $("#newGroup").onclick=newGroup;
+$("#hfKey").oninput=e=>{ const v=e.target.value.trim(); if(v) cfg.keys.hf=v; else delete cfg.keys.hf; persistCfg(); };
 $("#saveGroup").onclick=saveGroup;
 $("#delGroup").onclick=deleteGroup;
 $("#groupModal").onclick=e=>{ if(e.target===$("#groupModal")) $("#groupModal").classList.remove("show"); };
@@ -1209,13 +1271,20 @@ sendBtn.onclick=send;
 inputEl.oninput=autosize;
 inputEl.onkeydown=e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); } };
 
-// Image mode toggle
+// Image mode toggle + style picker
+(function initImgStyle(){
+  const sel=$("#imgStyle");
+  sel.innerHTML=POLLINATIONS_STYLES.map(s=>`<option value="${s}">${s}</option>`).join("");
+  sel.value=cfg.imgStyle;
+  sel.onchange=e=>{ cfg.imgStyle=e.target.value; persistCfg(); };
+})();
 $("#imgBtn").onclick=()=>{
   imageMode=!imageMode;
   $("#imgBtn").classList.toggle("active",imageMode);
+  $("#imgBar").classList.toggle("show",imageMode);
   document.querySelector(".composer").classList.toggle("imgmode",imageMode);
   inputEl.placeholder = imageMode
-    ? "🎨 Describe an image to generate — or attach one to edit/improve it (Nano Banana)"
+    ? "🎨 Describe an image to generate — or attach one to edit/improve it"
     : "Message AL-AI…  (Enter to send, Shift+Enter for newline)";
   inputEl.focus();
 };
