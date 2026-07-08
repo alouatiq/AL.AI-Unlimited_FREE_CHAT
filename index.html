@@ -197,6 +197,7 @@
   .od-badge.inst{background:#3fb95022;color:var(--ok)}
   .od-badge.no{background:var(--bg3);color:var(--muted)}
   .od-badge.dl{background:#d2992222;color:var(--warn)}
+  .od-loaded{font-size:11px;padding:2px 8px;border-radius:20px;background:#3b82f622;color:var(--accent);white-space:nowrap}
   .tag{font-size:10px;padding:1px 6px;border-radius:10px;background:var(--bg3);color:var(--muted);margin-left:6px}
   .tag.unc{background:#f8514922;color:var(--danger)}
 
@@ -913,6 +914,7 @@ async function runWebLLM(model, messages, onChunk, signal, onStatus){
     onStatus("⬇ Loading on-device model — first run downloads it once, then it's cached…");
     _engine=await w.CreateMLCEngine(model,{initProgressCallback:p=>onStatus("⬇ "+(p.text||"loading…"))});
     _engineModel=model;
+    try{ refreshOdLoaded(); updateHint(); }catch(e){}
   }
   onStatus("🖥 Generating on your device…");
   const stream=await _engine.chat.completions.create({messages,stream:true,temperature:0.7});
@@ -1155,23 +1157,40 @@ function buildOnDeviceBody(body){
   else fill(WEBLLM_MODELS.map(m=>({...m,phone:m.tag==="phone",unc:m.tag==="unc"})));
 }
 function buildOdRow(m){
-  const row=document.createElement("div"); row.className="od-model";
+  const row=document.createElement("div"); row.className="od-model"; row.dataset.model=m.id;
   row.innerHTML=`<div class="od-name"><b>${escapeHtml(m.name)}</b><span class="tag">${escapeHtml(m.tag||m.size||"")}</span>${m.unc?'<span class="tag unc">unc</span>':''}${m.phone?'<span class="tag">📱</span>':''}<div class="od-meta">${escapeHtml(m.meta)}</div></div>
     <span class="od-badge no">checking…</span>
+    <span class="od-loaded" style="display:none">⚡ loaded</span>
     <button class="btn sm dl">Download</button>
+    <button class="btn sm load" style="display:none">Load</button>
     <button class="btn sm rm" style="display:none">Remove</button>`;
-  const badge=row.querySelector(".od-badge"), dl=row.querySelector(".dl"), rm=row.querySelector(".rm");
+  const badge=row.querySelector(".od-badge"), dl=row.querySelector(".dl"), load=row.querySelector(".load"), rm=row.querySelector(".rm");
   const setState=inst=>{
+    row.dataset.installed=inst?"1":"0";
     if(inst){ badge.className="od-badge inst"; badge.textContent="Installed ✓"; dl.style.display="none"; rm.style.display=""; }
     else { badge.className="od-badge no"; badge.textContent="Not downloaded"; dl.style.display=""; rm.style.display="none"; }
+    refreshOdLoaded();
   };
   if(!webgpuOK()){ badge.className="od-badge no"; badge.textContent="unavailable"; dl.disabled=true; }
   else { isInstalled(m.id).then(setState); }
-  dl.onclick=async()=>{ if(!webgpuOK()) return; badge.className="od-badge dl"; dl.disabled=true;
-    try{ await downloadModel(m.id, t=>{ badge.textContent="⬇ "+(t.length>22?t.slice(0,22)+"…":t); }); setState(true); }
-    catch(e){ badge.className="od-badge no"; badge.textContent="failed"; } finally{ dl.disabled=false; } };
-  rm.onclick=async()=>{ try{ await removeModel(m.id); setState(false); }catch(e){} };
+  // Download (fetch weights) and Load (warm into GPU memory) both call downloadModel,
+  // which keeps the engine resident so it does NOT reload on every message.
+  const warm=async(icon)=>{ if(!webgpuOK()) return; badge.className="od-badge dl"; dl.disabled=true; load.disabled=true;
+    try{ await downloadModel(m.id, t=>{ badge.textContent=icon+" "+(t.length>18?t.slice(0,18)+"…":t); }); setState(true); updateHint(); }
+    catch(e){ badge.className="od-badge no"; badge.textContent="failed"; }
+    finally{ dl.disabled=false; load.disabled=false; refreshOdLoaded(); } };
+  dl.onclick=()=>warm("⬇");
+  load.onclick=()=>warm("⚡");
+  rm.onclick=async()=>{ try{ await removeModel(m.id); setState(false); updateHint(); }catch(e){} };
   return row;
+}
+// Reflect which on-device model is currently resident in memory (warm engine).
+function refreshOdLoaded(){
+  document.querySelectorAll(".od-model").forEach(r=>{
+    const on = r.dataset.model===_engineModel;
+    const pill=r.querySelector(".od-loaded"); if(pill) pill.style.display=on?"":"none";
+    const load=r.querySelector(".load"); if(load) load.style.display=(!on && r.dataset.installed==="1")?"":"none";
+  });
 }
 
 /* Reusable drag-and-drop for [data-val] children */
@@ -1198,9 +1217,11 @@ function updateModeLabel(){ if(cfg.uncensored){ modeLabel.textContent="Uncensore
 function updateHint(){
   const usable=cfg.providers.filter(p=>p.enabled&&providerUsable(p.id)).map(p=>PROVIDERS[p.id].label.split(" ")[0]);
   const el=$("#hint");
-  el.textContent = usable.length
+  let t = usable.length
     ? `Fallback: ${usable.join(" → ")} · history stays in your browser`
     : "No engine set — open ⚙ Settings (add a key or download an on-device model)";
+  if(_engineModel) t += ` · 🖥 ${shortWL(_engineModel)} ready (stays loaded)`;
+  el.textContent=t;
 }
 
 /* ======================= Attachments ======================= */
