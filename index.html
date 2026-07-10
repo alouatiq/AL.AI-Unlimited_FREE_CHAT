@@ -34,6 +34,7 @@
   .group-head:hover{background:var(--bg3)}
   .group-head.active{background:var(--bg3)}
   .gtwisty{width:14px;text-align:center;color:var(--muted);cursor:pointer;flex-shrink:0}
+  .gicon{flex-shrink:0}
   .gname{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
   .gdot{color:var(--accent);font-size:9px;vertical-align:middle}
   .gact{opacity:0;border:none;background:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px;flex-shrink:0}
@@ -53,6 +54,13 @@
   .foot-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .foot-actions .sep{opacity:.5}
   .foot-note{opacity:.7;font-size:11px}
+  .hist-item .edit{opacity:0;color:var(--muted);border:none;background:none;cursor:pointer;padding:2px}
+  .hist-item:hover .edit{opacity:1}
+  .hist-item .edit:hover{color:var(--accent)}
+  .iconpick{display:flex;flex-wrap:wrap;gap:5px}
+  .iconpick .ic{width:34px;height:34px;font-size:18px;border:1px solid var(--border);background:var(--bg);border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+  .iconpick .ic:hover{border-color:var(--accent)}
+  .iconpick .ic.sel{border-color:var(--accent);background:var(--bg3);box-shadow:0 0 0 1px var(--accent)}
 
   /* Main */
   #main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
@@ -242,7 +250,7 @@
 <div id="main">
   <div class="topbar">
     <button class="icon-btn" id="menuBtn" title="Toggle sidebar">☰</button>
-    <button class="icon-btn" id="groupBtn" style="width:auto;padding:0 12px;gap:6px;font-weight:600" title="Edit this group's instructions">📁 <span id="groupBtnName">General</span></button>
+    <button class="icon-btn" id="groupBtn" style="width:auto;padding:0 12px;gap:6px;font-weight:600" title="Edit this group (name, icon, instructions)"><span id="groupBtnIcon">📁</span> <span id="groupBtnName">General</span></button>
     <div class="spacer"></div>
     <div class="toggle-wrap">
       <span>Mode:</span>
@@ -296,6 +304,25 @@
   </div>
 </div>
 
+<!-- Chat edit (title + icon) modal -->
+<div class="modal-bg" id="chatModal">
+  <div class="modal" style="max-width:460px">
+    <h2>Edit chat</h2>
+    <div class="field">
+      <label>Title</label>
+      <input type="text" id="chatTitle" placeholder="Chat title">
+    </div>
+    <div class="field">
+      <label>Icon</label>
+      <div class="iconpick" id="chatIcons"></div>
+      <input type="text" id="chatIconCustom" placeholder="or paste any emoji" maxlength="4" style="margin-top:6px;max-width:140px">
+    </div>
+    <div class="modal-actions">
+      <button class="btn primary" id="saveChat">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Group / project modal -->
 <div class="modal-bg" id="groupModal">
   <div class="modal" style="max-width:520px">
@@ -304,6 +331,11 @@
     <div class="field">
       <label>Group name</label>
       <input type="text" id="groupName" placeholder="e.g. Coding assistant">
+    </div>
+    <div class="field">
+      <label>Icon</label>
+      <div class="iconpick" id="groupIcons"></div>
+      <input type="text" id="groupIconCustom" placeholder="or paste any emoji" maxlength="4" style="margin-top:6px;max-width:140px">
     </div>
     <div class="field">
       <label>Instructions / system prompt</label>
@@ -506,6 +538,37 @@ function newChat(){
 function ensureChat(){ if(!currentChat()) newChat(); return currentChat(); }
 function persist(){ LS.set("fc_chats",chats); LS.set("fc_current",currentId); LS.set("fc_groups",groups); LS.set("fc_currentGroup",currentGroupId); }
 
+/* ---------- Icons & chat editing ---------- */
+const ICON_SET = ["💬","🗨️","💡","🧠","🤖","⭐","🔥","📌","📝","📚","💻","🐍","🎨","🎵","📷","🎬","🍔","☕","✈️","🏠","💼","📈","🔬","⚖️","🩺","🌍","❤️","🎮","🛒","📧","🧪","🧩","🎯","🚀","🐛","🔐","📊","🗂️","🎓","📁"];
+let editChatId=null;
+function renderIconPicker(container, current, onSelect){
+  container.innerHTML="";
+  ICON_SET.forEach(e=>{
+    const b=document.createElement("button"); b.type="button"; b.className="ic"+(e===current?" sel":""); b.textContent=e;
+    b.onclick=()=>{ container.querySelectorAll(".ic").forEach(x=>x.classList.remove("sel")); b.classList.add("sel"); onSelect&&onSelect(e); };
+    container.appendChild(b);
+  });
+}
+function pickedIcon(container, customInput, fallback){
+  const c=(customInput.value||"").trim(); if(c) return c;
+  const sel=container.querySelector(".ic.sel"); return sel?sel.textContent:fallback;
+}
+function openChatModal(id){
+  const c=chats.find(x=>x.id===id); if(!c) return;
+  editChatId=id;
+  $("#chatTitle").value=c.title||"";
+  const icon=c.icon||"💬";
+  $("#chatIconCustom").value = ICON_SET.includes(icon) ? "" : icon;
+  renderIconPicker($("#chatIcons"), icon, ()=>{ $("#chatIconCustom").value=""; });
+  $("#chatModal").classList.add("show");
+}
+function saveChat(){
+  const c=chats.find(x=>x.id===editChatId); if(!c) return;
+  c.title=$("#chatTitle").value.trim()||"Untitled";
+  c.icon=pickedIcon($("#chatIcons"), $("#chatIconCustom"), "💬");
+  persist(); $("#chatModal").classList.remove("show"); renderHistory();
+}
+
 /* ---------- Groups (projects) ---------- */
 function newGroup(){
   const id="g"+Date.now()+Math.floor(Math.random()*1000);
@@ -517,6 +580,9 @@ function openGroupModal(gid){
   editGroupId=gid;
   $("#groupName").value=g.name;
   $("#groupSys").value=g.sys||"";
+  const icon=g.icon||"📁";
+  $("#groupIconCustom").value = ICON_SET.includes(icon) ? "" : icon;
+  renderIconPicker($("#groupIcons"), icon, ()=>{ $("#groupIconCustom").value=""; });
   $("#delGroup").style.display = groups.length>1 ? "" : "none";
   $("#groupModal").classList.add("show");
 }
@@ -524,6 +590,7 @@ function saveGroup(){
   const g=groups.find(x=>x.id===editGroupId); if(!g) return;
   g.name=$("#groupName").value.trim()||"Untitled";
   g.sys=$("#groupSys").value;
+  g.icon=pickedIcon($("#groupIcons"), $("#groupIconCustom"), "📁");
   persist(); $("#groupModal").classList.remove("show"); renderHistory(); updateGroupBtn();
 }
 function deleteGroup(){
@@ -541,6 +608,7 @@ function updateGroupBtn(){
   const gid=c?c.groupId:currentGroupId;
   const g=groups.find(x=>x.id===gid)||groups[0];
   $("#groupBtnName").textContent=g?g.name:"—";
+  $("#groupBtnIcon").textContent=g?(g.icon||"📁"):"📁";
   $("#groupBtn").onclick=()=>openGroupModal(g.id);
 }
 function deleteChat(id){
@@ -558,9 +626,10 @@ function renderHistory(){
     const groupEl=document.createElement("div"); groupEl.className="group";
     const head=document.createElement("div"); head.className="group-head"+(g.id===currentGroupId?" active":"");
     head.innerHTML=`<span class="gtwisty">${g.collapsed?"▸":"▾"}</span>
+      <span class="gicon">${escapeHtml(g.icon||"📁")}</span>
       <span class="gname">${escapeHtml(g.name)}${hasSys?' <span class="gdot" title="has instructions">●</span>':''}</span>
       <button class="gact gnew" title="New chat here">＋</button>
-      <button class="gact gedit" title="Edit instructions">✎</button>`;
+      <button class="gact gedit" title="Edit group (name, icon, instructions)">✎</button>`;
     head.querySelector(".gtwisty").onclick=e=>{ e.stopPropagation(); g.collapsed=!g.collapsed; persist(); renderHistory(); };
     head.onclick=e=>{ if(e.target.closest(".gact")||e.target.classList.contains("gtwisty")) return; currentGroupId=g.id; persist(); renderHistory(); updateGroupBtn(); };
     head.querySelector(".gnew").onclick=e=>{ e.stopPropagation(); currentGroupId=g.id; newChat(); closeSidebarOnMobile(); };
@@ -572,9 +641,10 @@ function renderHistory(){
       for(const c of chatsIn){
         const item=document.createElement("div");
         item.className="hist-item"+(c.id===currentId?" active":"");
-        item.innerHTML=`<span>💬</span><span class="title"></span><button class="del" title="Delete">✕</button>`;
+        item.innerHTML=`<span class="ci">${escapeHtml(c.icon||"💬")}</span><span class="title"></span><button class="edit" title="Rename / change icon">✎</button><button class="del" title="Delete">✕</button>`;
         item.querySelector(".title").textContent=c.title||"New chat";
-        item.onclick=e=>{ if(e.target.classList.contains("del"))return; currentId=c.id; currentGroupId=c.groupId; persist(); renderHistory(); renderMessages(); updateGroupBtn(); closeSidebarOnMobile(); };
+        item.onclick=e=>{ if(e.target.closest(".del,.edit"))return; currentId=c.id; currentGroupId=c.groupId; persist(); renderHistory(); renderMessages(); updateGroupBtn(); closeSidebarOnMobile(); };
+        item.querySelector(".edit").onclick=e=>{ e.stopPropagation(); openChatModal(c.id); };
         item.querySelector(".del").onclick=e=>{ e.stopPropagation(); deleteChat(c.id); };
         cont.appendChild(item);
       }
@@ -1315,6 +1385,8 @@ $("#hfKey").oninput=e=>{ const v=e.target.value.trim(); if(v) cfg.keys.hf=v; els
 $("#saveGroup").onclick=saveGroup;
 $("#delGroup").onclick=deleteGroup;
 $("#groupModal").onclick=e=>{ if(e.target===$("#groupModal")) $("#groupModal").classList.remove("show"); };
+$("#saveChat").onclick=saveChat;
+$("#chatModal").onclick=e=>{ if(e.target===$("#chatModal")) $("#chatModal").classList.remove("show"); };
 $("#menuBtn").onclick=()=>toggleSidebar();
 $("#backdrop").onclick=()=>toggleSidebar(false);
 $("#settingsBtn").onclick=openSettings;
