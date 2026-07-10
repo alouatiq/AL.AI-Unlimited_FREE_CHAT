@@ -210,6 +210,11 @@
   .od-badge.no{background:var(--bg3);color:var(--muted)}
   .od-badge.dl{background:#d2992222;color:var(--warn)}
   .od-loaded{font-size:11px;padding:2px 8px;border-radius:20px;background:#3b82f622;color:var(--accent);white-space:nowrap}
+  .od-inst{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px;background:var(--bg2)}
+  .od-inst.drag{opacity:.4}
+  .od-inst .mv{cursor:grab;color:var(--muted);flex-shrink:0}
+  .od-inst .od-name{flex:1;min-width:110px}
+  .btn.sm.on{background:var(--accent);border-color:var(--accent);color:#fff}
   .tag{font-size:10px;padding:1px 6px;border-radius:10px;background:var(--bg3);color:var(--muted);margin-left:6px}
   .tag.unc{background:#f8514922;color:var(--danger)}
 
@@ -424,13 +429,14 @@ let cfg = {
   models: LS.get("fc_models", (LS.get("fc_normal",null) ? {...defaultModels(), openrouter:LS.get("fc_normal")} : defaultModels())),
   od:    LS.get("fc_od",    "Llama-3.2-3B-Instruct-q4f16_1-MLC"),
   odUnc: LS.get("fc_od_unc","Hermes-3-Llama-3.2-3B-q4f16_1-MLC"),
+  installed: LS.get("fc_installed", []),            // downloaded on-device model ids (ordered, top of list)
   uncensored: LS.get("fc_uncmode",false),
   theme: LS.get("fc_theme","dark"),
   imgStyle: LS.get("fc_imgstyle","flux"),           // Pollinations generation style
 };
 function persistCfg(){
   LS.set("fc_keys",cfg.keys); LS.set("fc_providers",cfg.providers); LS.set("fc_models",cfg.models);
-  LS.set("fc_od",cfg.od); LS.set("fc_od_unc",cfg.odUnc);
+  LS.set("fc_od",cfg.od); LS.set("fc_od_unc",cfg.odUnc); LS.set("fc_installed",cfg.installed);
   LS.set("fc_uncmode",cfg.uncensored); LS.set("fc_theme",cfg.theme); LS.set("fc_imgstyle",cfg.imgStyle);
 }
 
@@ -986,7 +992,7 @@ function errorHelp(err){
 }
 
 /* ======================= On-device (WebLLM) ======================= */
-let _webllm=null, _engine=null, _engineModel=null, _f16=null;
+let _webllm=null, _engine=null, _engineModel=null, _f16=null, _odScanned=false, _odRedraw=null;
 function webgpuOK(){ return typeof navigator!=="undefined" && !!navigator.gpu; }
 // Many models are q4f16 and need the WebGPU "shader-f16" feature; some GPUs lack it.
 async function webgpuF16(){
@@ -1007,7 +1013,7 @@ async function runWebLLM(model, messages, onChunk, signal, onStatus){
     onStatus("⬇ Loading on-device model — first run downloads it once, then it's cached…");
     _engine=await w.CreateMLCEngine(model,{initProgressCallback:p=>onStatus("⬇ "+(p.text||"loading…"))});
     _engineModel=model;
-    try{ refreshOdLoaded(); updateHint(); }catch(e){}
+    try{ if(_odRedraw) _odRedraw(); updateHint(); }catch(e){}
   }
   onStatus("🖥 Generating on your device…");
   const stream=await _engine.chat.completions.create({messages,stream:true,temperature:0.7});
@@ -1045,7 +1051,7 @@ async function removeModel(model){ const w=await loadWebLLM(); if(_engineModel==
 // Wipe ALL downloaded on-device models + their weights from the browser. This app
 // has no service worker, so Cache Storage + WebLLM's IndexedDB are only used by WebLLM.
 async function clearOnDeviceCache(){
-  _engine=null; _engineModel=null;
+  _engine=null; _engineModel=null; cfg.installed=[]; persistCfg();
   // 1) Cache Storage holds the multi-GB model weights.
   try{ if(window.caches){ const names=await caches.keys(); for(const n of names) await caches.delete(n); } }catch(e){}
   // 2) WebLLM's metadata lives in IndexedDB (tvmjs / webllm).
@@ -1216,13 +1222,11 @@ function renderAvail(pid, availBox, q){
 
 function buildOnDeviceBody(body){
   body.innerHTML=`
-    <div class="prov-note">Runs fully in your browser via WebGPU — no key, no limits, works offline. Download once; it's cached (installed). ${webgpuOK()?"":"<b style='color:var(--danger)'>This browser has no WebGPU — try desktop Chrome/Edge, or Chrome on Android.</b>"}<br>
-    <b>Phone tip:</b> only models ≲1.7 GB (tick <i>phone-safe</i>) reliably run on a phone. Truly <span class="tag unc">unc</span> models start at ~2.2 GB — tick both filters to see if any fit your device.</div>
+    <div class="prov-note">Runs fully in your browser via WebGPU — no key, no limits, works offline. ${webgpuOK()?"":"<b style='color:var(--danger)'>This browser has no WebGPU — try desktop Chrome/Edge, or Chrome on Android.</b>"}</div>
     <div class="prov-note od-f16warn" style="display:none;color:var(--danger)"></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-      <label style="flex:1;min-width:150px;font-size:12px">Active — Normal<br><select class="od-normal" style="margin-top:4px"></select></label>
-      <label style="flex:1;min-width:150px;font-size:12px">Active — Uncensored<br><select class="od-unc" style="margin-top:4px"></select></label>
-    </div>
+    <div class="plabel">⬇ Downloaded — drag ⠿ to reorder · <b>N</b> = active in Normal mode · <b>U</b> = active in Uncensored mode · ▶ load now · 🗑 uninstall</div>
+    <div class="od-installed"><div class="sel-empty">No models downloaded yet — pick one below.</div></div>
+    <div class="plabel" style="margin-top:12px">＋ Download more</div>
     <div style="display:flex;gap:10px 14px;align-items:center;margin:8px 0;flex-wrap:wrap">
       <input class="od-search" type="text" placeholder="Search models…" style="flex:1;min-width:130px">
       <label style="font-size:12px;display:flex;gap:5px;align-items:center">Size
@@ -1232,73 +1236,79 @@ function buildOnDeviceBody(body){
           <option value="balanced">balanced (1.7–2.8 GB)</option>
           <option value="large">large (&gt;2.8 GB)</option>
         </select></label>
-    </div>
-    <div style="display:flex;gap:14px;align-items:center;margin:0 0 8px;flex-wrap:wrap">
       <label style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" class="f-phone"> phone-safe 📱</label>
       <label style="font-size:12px;display:flex;gap:5px;align-items:center"><input type="checkbox" class="f-unc"> uncensored</label>
     </div>
     <div class="od-list"><div class="sel-empty">Loading model catalogue…</div></div>`;
-  const listEl=body.querySelector(".od-list");
-  const nSel=body.querySelector(".od-normal"), uSel=body.querySelector(".od-unc");
+  const instEl=body.querySelector(".od-installed"), listEl=body.querySelector(".od-list");
   const search=body.querySelector(".od-search"), fPhone=body.querySelector(".f-phone"), fUnc=body.querySelector(".f-unc"), fSize=body.querySelector(".od-size");
   let catalog=[];
+  const metaFor=id=>catalog.find(x=>x.id===id)||{id,name:shortWL(id),meta:""};
+
+  function drawInstalled(){
+    const ids=cfg.installed||[]; instEl.innerHTML="";
+    if(!ids.length){ instEl.innerHTML='<div class="sel-empty">No models downloaded yet — pick one below.</div>'; return; }
+    ids.forEach(id=>{
+      const m=metaFor(id), isN=cfg.od===id, isU=cfg.odUnc===id, warm=_engineModel===id;
+      const row=document.createElement("div"); row.className="od-inst"; row.dataset.val=id; row.dataset.model=id; row.draggable=true;
+      row.innerHTML=`<span class="mv">⠿</span>
+        <div class="od-name"><b>${escapeHtml(m.name)}</b>${warm?' <span class="od-loaded">⚡ loaded</span>':''}<div class="od-meta">${escapeHtml(m.meta||"")}</div></div>
+        <button class="btn sm rn${isN?' on':''}" title="Use in Normal mode">N</button>
+        <button class="btn sm ru${isU?' on':''}" title="Use in Uncensored mode">U</button>
+        <button class="btn sm ld" title="Load into memory now">▶</button>
+        <button class="btn sm rm" title="Uninstall">🗑</button>`;
+      row.querySelector(".rn").onclick=()=>{ cfg.od=id; persistCfg(); drawInstalled(); updateHint(); };
+      row.querySelector(".ru").onclick=()=>{ cfg.odUnc=id; persistCfg(); drawInstalled(); updateHint(); };
+      row.querySelector(".ld").onclick=async e=>{ if(!webgpuOK())return; const b=e.target; b.disabled=true; b.textContent="…";
+        try{ await downloadModel(id, t=>{ b.textContent="⚡"; }); }catch(err){} b.disabled=false; b.textContent="▶"; drawInstalled(); updateHint(); };
+      row.querySelector(".rm").onclick=async()=>{ if(!confirm("Uninstall this model from the browser?")) return; try{ await removeModel(id); }catch(e){} cfg.installed=(cfg.installed||[]).filter(x=>x!==id); persistCfg(); drawInstalled(); draw(); updateHint(); };
+      instEl.appendChild(row);
+    });
+    enableDnD(instEl, ()=>{ cfg.installed=[...instEl.querySelectorAll(".od-inst")].map(e=>e.dataset.val); persistCfg(); });
+  }
+  const markInstalled=id=>{ if(!(cfg.installed||[]).includes(id)){ (cfg.installed=cfg.installed||[]).push(id); persistCfg(); } drawInstalled(); draw(); updateHint(); };
   const draw=()=>{
-    const q=search.value.toLowerCase(), sz=fSize.value;
-    const items=catalog.filter(m=> m.id.toLowerCase().includes(q) && (!fPhone.checked||m.phone) && (!fUnc.checked||m.unc) && (sz==="any"||m.size===sz)).slice(0,60);
+    const q=search.value.toLowerCase(), sz=fSize.value, inst=new Set(cfg.installed||[]);
+    const items=catalog.filter(m=> !inst.has(m.id) && m.id.toLowerCase().includes(q) && (!fPhone.checked||m.phone) && (!fUnc.checked||m.unc) && (sz==="any"||m.size===sz)).slice(0,60);
     listEl.innerHTML="";
     if(!items.length){ listEl.innerHTML='<div class="sel-empty">'+(fPhone.checked&&fUnc.checked?"No uncensored model is small enough to be phone-safe. Untick one filter.":"No matches — loosen the filters.")+'</div>'; return; }
-    for(const m of items) listEl.appendChild(buildOdRow(m));
+    for(const m of items) listEl.appendChild(buildOdRow(m, ()=>markInstalled(m.id)));
   };
-  const fill=cat=>{ catalog=cat;
-    const opts=cat.map(m=>`<option value="${m.id}">${escapeHtml(m.name)} — ${escapeHtml(m.meta)}</option>`).join("");
-    nSel.innerHTML=opts; uSel.innerHTML=opts;
-    if(cat.some(m=>m.id===cfg.od)) nSel.value=cfg.od;
-    if(cat.some(m=>m.id===cfg.odUnc)) uSel.value=cfg.odUnc;
-    draw();
-  };
-  nSel.onchange=e=>{ cfg.od=e.target.value; persistCfg(); };
-  uSel.onchange=e=>{ cfg.odUnc=e.target.value; persistCfg(); };
+  _odRedraw=()=>{ drawInstalled(); };   // let chat/warm updates refresh the ⚡ state
+  drawInstalled();                       // show installed models right away (before catalogue loads)
+  const fill=cat=>{ catalog=cat; drawInstalled(); draw(); scanInstalled(); };
   search.oninput=draw; fPhone.onchange=draw; fUnc.onchange=draw; fSize.onchange=draw;
-  // Warn if the GPU lacks shader-f16 (then q4f16 models fail to compile).
   if(webgpuOK()) webgpuF16().then(ok=>{ if(!ok){ const el=body.querySelector(".od-f16warn"); if(el){ el.style.display=""; el.innerHTML="⚠ Your GPU/browser has <b>no shader-f16</b> support, so <b>q4f16</b> models will fail to load. Search <b>q4f32</b> and pick a <b>f32-safe</b> model instead."; fSize.value="any"; search.value="q4f32"; draw(); } } });
   if(webgpuOK()) getOnDeviceCatalog().then(fill);
-  else fill(WEBLLM_MODELS.map(m=>({...m,phone:m.tag==="phone",unc:m.tag==="unc"})));
+  else fill(fallbackCatalog());
+
+  // One-time reconcile: discover models already in cache (from before this feature)
+  // and prune any listed-but-gone. Bounded to the curated set to avoid many probes.
+  function scanInstalled(){
+    if(!webgpuOK() || _odScanned) return; _odScanned=true;
+    const ids=[...new Set([...(cfg.installed||[]), ...WEBLLM_MODELS.map(x=>x.id)])];
+    Promise.all(ids.map(id=>isInstalled(id).then(x=>({id,x})).catch(()=>({id,x:false})))).then(res=>{
+      let changed=false;
+      res.forEach(({id,x})=>{ if(x && !(cfg.installed||[]).includes(id)){ (cfg.installed=cfg.installed||[]).push(id); changed=true; } });
+      const before=(cfg.installed||[]).length;
+      cfg.installed=(cfg.installed||[]).filter(id=>{ const r=res.find(z=>z.id===id); return r? r.x : true; });
+      if(cfg.installed.length!==before) changed=true;
+      if(changed){ persistCfg(); drawInstalled(); draw(); updateHint(); }
+    });
+  }
 }
-function buildOdRow(m){
+// Catalogue row (download-only). onDownloaded() moves it to the installed list.
+function buildOdRow(m, onDownloaded){
   const row=document.createElement("div"); row.className="od-model"; row.dataset.model=m.id;
   row.innerHTML=`<div class="od-name"><b>${escapeHtml(m.name)}</b><span class="tag">${escapeHtml(m.tag||m.size||"")}</span>${m.unc?'<span class="tag unc">unc</span>':''}${m.phone?'<span class="tag">📱</span>':''}<div class="od-meta">${escapeHtml(m.meta)}</div></div>
-    <span class="od-badge no">checking…</span>
-    <span class="od-loaded" style="display:none">⚡ loaded</span>
-    <button class="btn sm dl">Download</button>
-    <button class="btn sm load" style="display:none">Load</button>
-    <button class="btn sm rm" style="display:none">Remove</button>`;
-  const badge=row.querySelector(".od-badge"), dl=row.querySelector(".dl"), load=row.querySelector(".load"), rm=row.querySelector(".rm");
-  const setState=inst=>{
-    row.dataset.installed=inst?"1":"0";
-    if(inst){ badge.className="od-badge inst"; badge.textContent="Installed ✓"; dl.style.display="none"; rm.style.display=""; }
-    else { badge.className="od-badge no"; badge.textContent="Not downloaded"; dl.style.display=""; rm.style.display="none"; }
-    refreshOdLoaded();
-  };
-  if(!webgpuOK()){ badge.className="od-badge no"; badge.textContent="unavailable"; dl.disabled=true; }
-  else { isInstalled(m.id).then(setState); }
-  // Download (fetch weights) and Load (warm into GPU memory) both call downloadModel,
-  // which keeps the engine resident so it does NOT reload on every message.
-  const warm=async(icon)=>{ if(!webgpuOK()) return; badge.className="od-badge dl"; dl.disabled=true; load.disabled=true;
-    try{ await downloadModel(m.id, t=>{ badge.textContent=icon+" "+(t.length>18?t.slice(0,18)+"…":t); }); setState(true); updateHint(); }
-    catch(e){ badge.className="od-badge no"; badge.textContent="failed"; }
-    finally{ dl.disabled=false; load.disabled=false; refreshOdLoaded(); } };
-  dl.onclick=()=>warm("⬇");
-  load.onclick=()=>warm("⚡");
-  rm.onclick=async()=>{ try{ await removeModel(m.id); setState(false); updateHint(); }catch(e){} };
+    <span class="od-badge no">Not downloaded</span>
+    <button class="btn sm dl">Download</button>`;
+  const badge=row.querySelector(".od-badge"), dl=row.querySelector(".dl");
+  if(!webgpuOK()){ badge.textContent="unavailable"; dl.disabled=true; }
+  dl.onclick=async()=>{ if(!webgpuOK()) return; badge.className="od-badge dl"; dl.disabled=true;
+    try{ await downloadModel(m.id, t=>{ badge.textContent="⬇ "+(t.length>18?t.slice(0,18)+"…":t); }); badge.className="od-badge inst"; badge.textContent="Installed ✓"; onDownloaded&&onDownloaded(); }
+    catch(e){ badge.className="od-badge no"; badge.textContent="failed"; dl.disabled=false; } };
   return row;
-}
-// Reflect which on-device model is currently resident in memory (warm engine).
-function refreshOdLoaded(){
-  document.querySelectorAll(".od-model").forEach(r=>{
-    const on = r.dataset.model===_engineModel;
-    const pill=r.querySelector(".od-loaded"); if(pill) pill.style.display=on?"":"none";
-    const load=r.querySelector(".load"); if(load) load.style.display=(!on && r.dataset.installed==="1")?"":"none";
-  });
 }
 
 /* Reusable drag-and-drop for [data-val] children */
