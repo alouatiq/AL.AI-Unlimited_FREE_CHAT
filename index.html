@@ -48,7 +48,11 @@
   .hist-item .del{opacity:0;color:var(--muted);border:none;background:none;cursor:pointer;padding:2px}
   .hist-item:hover .del{opacity:1}
   .hist-item .del:hover{color:var(--danger)}
-  .side-foot{padding:12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
+  .side-foot{padding:12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+  .foot-brand{font-size:13px;color:var(--txt);font-weight:600}
+  .foot-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .foot-actions .sep{opacity:.5}
+  .foot-note{opacity:.7;font-size:11px}
 
   /* Main */
   #main{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
@@ -223,7 +227,13 @@
   </div>
   <div id="history"></div>
   <div class="side-foot">
-    100% in-browser · multi-provider + on-device · <a class="link" href="#" id="clearAll">clear all</a>
+    <div class="foot-brand"><b>AL.AI Chat</b> · <a class="link" href="https://alouatiq.com" target="_blank" rel="noopener">ALOUATIQ.COM</a></div>
+    <div class="foot-actions">
+      <a class="link" href="#" id="clearAll">Clear chats</a>
+      <span class="sep">·</span>
+      <a class="link" href="#" id="clearModels">Delete installed AI</a>
+    </div>
+    <div class="foot-note">100% in-browser · multi-provider + on-device</div>
   </div>
 </div>
 
@@ -948,6 +958,17 @@ async function getOnDeviceCatalog(){
 function fallbackCatalog(){ return WEBLLM_MODELS.map(m=>({...m, size:(m.tag==="unc"?"balanced":m.tag), phone:m.tag==="phone", unc:m.tag==="unc"})); }
 async function isInstalled(model){ try{ const w=await loadWebLLM(); return await w.hasModelInCache(model); }catch(e){ return false; } }
 async function removeModel(model){ const w=await loadWebLLM(); if(_engineModel===model){ _engine=null; _engineModel=null; } await w.deleteModelInCache(model); }
+// Wipe ALL downloaded on-device models + their weights from the browser. This app
+// has no service worker, so Cache Storage + WebLLM's IndexedDB are only used by WebLLM.
+async function clearOnDeviceCache(){
+  _engine=null; _engineModel=null;
+  // 1) Cache Storage holds the multi-GB model weights.
+  try{ if(window.caches){ const names=await caches.keys(); for(const n of names) await caches.delete(n); } }catch(e){}
+  // 2) WebLLM's metadata lives in IndexedDB (tvmjs / webllm).
+  try{ if(indexedDB.databases){ const dbs=await indexedDB.databases(); for(const db of dbs){ if(db.name) indexedDB.deleteDatabase(db.name); } } }catch(e){}
+  // 3) Best-effort per-model delete via the library API.
+  try{ const w=await loadWebLLM(); for(const m of WEBLLM_MODELS){ try{ await w.deleteModelInCache(m.id); }catch(e){} } }catch(e){}
+}
 async function downloadModel(model, onStatus){
   const w=await loadWebLLM();
   _engine=await w.CreateMLCEngine(model,{initProgressCallback:p=>onStatus(p.text||"downloading…")});
@@ -1286,7 +1307,17 @@ $("#resetAll").onclick=()=>{ if(!confirm("Reset providers, keys and model lists 
   cfg.od="Llama-3.2-3B-Instruct-q4f16_1-MLC"; cfg.odUnc="Hermes-3-Llama-3.2-3B-q4f16_1-MLC"; persistCfg(); renderProviders(); updateHint(); };
 modal.onclick=e=>{ if(e.target===modal){ saveSettings(); } };
 $("#themeBtn").onclick=()=>{ cfg.theme=cfg.theme==="dark"?"light":"dark"; document.documentElement.setAttribute("data-theme",cfg.theme); LS.set("fc_theme",cfg.theme); };
-$("#clearAll").onclick=e=>{ e.preventDefault(); if(confirm("Delete ALL chats from this browser?")){ chats=[]; currentId=null; persist(); renderHistory(); renderMessages(); } };
+$("#clearAll").onclick=e=>{ e.preventDefault(); if(confirm("Delete ALL chats from this browser? (Groups and settings are kept.)")){ chats=[]; currentId=null; persist(); renderHistory(); renderMessages(); } };
+$("#clearModels").onclick=async e=>{
+  e.preventDefault();
+  if(!confirm("Delete ALL downloaded on-device AI models and their cache from this browser?\n\nThis frees up storage (models can be several GB). You'll re-download a model next time you use on-device AI.")) return;
+  const a=e.target, old=a.textContent; a.textContent="Deleting…";
+  try{ await clearOnDeviceCache(); a.textContent="Deleted ✓"; }
+  catch(err){ a.textContent="Failed"; }
+  setTimeout(()=>{ a.textContent=old; },2000);
+  if($("#modal").classList.contains("show")) renderProviders(); // refresh install badges if Settings open
+  updateHint();
+};
 uncToggle.onchange=()=>{ cfg.uncensored=uncToggle.checked; LS.set("fc_uncmode",cfg.uncensored); updateModeLabel(); updateHint(); };
 sendBtn.onclick=send;
 inputEl.oninput=autosize;
