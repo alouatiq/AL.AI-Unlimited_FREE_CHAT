@@ -1059,11 +1059,38 @@ async function clearOnDeviceCache(){
   // 3) Best-effort per-model delete via the library API.
   try{ const w=await loadWebLLM(); for(const m of WEBLLM_MODELS){ try{ await w.deleteModelInCache(m.id); }catch(e){} } }catch(e){}
 }
+// Global download registry so progress survives the Settings modal being
+// closed/reopened or the list redrawing — the fetch keeps running as long as
+// the tab is alive; only a full page refresh tears it down (WebLLM caches
+// completed shards, so re-clicking Download resumes from where it stopped).
+const _odDownloads={};                       // model_id -> {text, active, done, failed}
+function odDownloading(id){ return !!(_odDownloads[id] && _odDownloads[id].active); }
+function anyOdDownloading(){ return Object.values(_odDownloads).some(d=>d && d.active); }
+function odPaintBadges(id){                   // relocate + update every visible badge for this model
+  const d=_odDownloads[id]||{}, t=d.text||"";
+  document.querySelectorAll('.od-model[data-model="'+(window.CSS&&CSS.escape?CSS.escape(id):id)+'"]').forEach(row=>{
+    const badge=row.querySelector(".od-badge"), dl=row.querySelector(".dl"); if(!badge) return;
+    if(d.active){ badge.className="od-badge dl"; badge.textContent="⬇ "+(t.length>18?t.slice(0,18)+"…":t); if(dl) dl.disabled=true; }
+    else if(d.done){ badge.className="od-badge inst"; badge.textContent="Installed ✓"; if(dl) dl.disabled=true; }
+    else if(d.failed){ badge.className="od-badge no"; badge.textContent="failed"; if(dl) dl.disabled=false; }
+  });
+}
 async function downloadModel(model, onStatus){
   const w=await loadWebLLM();
-  _engine=await w.CreateMLCEngine(model,{initProgressCallback:p=>onStatus(p.text||"downloading…")});
-  _engineModel=model;
+  _odDownloads[model]={text:"starting…",active:true}; odPaintBadges(model);
+  try{
+    _engine=await w.CreateMLCEngine(model,{initProgressCallback:p=>{
+      const t=p.text||"downloading…"; _odDownloads[model]={text:t,active:true};
+      odPaintBadges(model); onStatus&&onStatus(t);
+    }});
+    _engineModel=model;
+    _odDownloads[model]={text:"done",active:false,done:true}; odPaintBadges(model);
+    // Track the install centrally so it sticks even if the row that started it is gone.
+    if(!(cfg.installed||[]).includes(model)){ (cfg.installed=cfg.installed||[]).push(model); persistCfg(); }
+  }catch(e){ _odDownloads[model]={text:String(e&&e.message||e),active:false,failed:true}; odPaintBadges(model); throw e; }
 }
+// Warn before a refresh/close would interrupt an in-flight download.
+window.addEventListener("beforeunload",e=>{ if(anyOdDownloading()){ e.preventDefault(); e.returnValue=""; } });
 
 /* ======================= Markdown (self-contained, XSS-safe) ======================= */
 function escapeHtml(s){ return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -1073,7 +1100,7 @@ function renderMarkdown(src){
   src=src.replace(/```(\w*)\n?([\s\S]*?)```/g,(_,lang,code)=>{
     const i=codeBlocks.length;
     codeBlocks.push(`<pre><button class="copy">copy</button><code class="lang-${escapeHtml(lang)}">${escapeHtml(code.replace(/\n$/,""))}</code></pre>`);
-    return ` CODE${i} `;
+    return `\n\n§§CODE${i}§§\n\n`;
   });
   let out=escapeHtml(src);
   out=out.replace(/^### (.*)$/gm,"<h3>$1</h3>").replace(/^## (.*)$/gm,"<h2>$1</h2>").replace(/^# (.*)$/gm,"<h1>$1</h1>");
@@ -1084,9 +1111,9 @@ function renderMarkdown(src){
   out=out.replace(/^(?:[-*] .*(?:\n|$))+/gm,b=>"<ul>"+b.trim().split("\n").map(l=>"<li>"+l.replace(/^[-*] /,"")+"</li>").join("")+"</ul>");
   out=out.replace(/^(?:\d+\. .*(?:\n|$))+/gm,b=>"<ol>"+b.trim().split("\n").map(l=>"<li>"+l.replace(/^\d+\. /,"")+"</li>").join("")+"</ol>");
   out=out.split(/\n{2,}/).map(b=>{ const t=b.trim(); if(!t) return "";
-    if(/^<(h[1-3]|ul|ol|pre|blockquote)/.test(t)) return t; if(t.startsWith(" CODE")) return t;
+    if(/^<(h[1-3]|ul|ol|pre|blockquote)/.test(t)) return t; if(/^§§CODE\d+§§$/.test(t)) return t;
     return "<p>"+t.replace(/\n/g,"<br>")+"</p>"; }).join("");
-  out=out.replace(/ CODE(\d+) /g,(_,i)=>codeBlocks[+i]);
+  out=out.replace(/§§CODE(\d+)§§/g,(_,i)=>codeBlocks[+i]);
   return out;
 }
 function wireCopy(root){
@@ -1224,9 +1251,11 @@ function buildOnDeviceBody(body){
   body.innerHTML=`
     <div class="prov-note">Runs fully in your browser via WebGPU — no key, no limits, works offline. ${webgpuOK()?"":"<b style='color:var(--danger)'>This browser has no WebGPU — try desktop Chrome/Edge, or Chrome on Android.</b>"}</div>
     <div class="prov-note od-f16warn" style="display:none;color:var(--danger)"></div>
-    <div class="plabel">⬇ Downloaded — drag ⠿ to reorder · <b>N</b> = active in Normal mode · <b>U</b> = active in Uncensored mode · ▶ load now · 🗑 uninstall</div>
+    <div class="plabel">⬇ Downloaded — drag ⠿ to reorder · <b>N</b> = use this model when chatting in <b>Normal</b> mode · <b>U</b> = use it in <b>Uncensored</b> mode · ▶ load now · 🗑 uninstall</div>
+    <div class="prov-note" style="margin:-2px 0 4px">N/U only pick <i>which</i> downloaded model each chat mode uses — they don't make a censored model uncensored. For fewer refusals, download a model tagged <span class="tag unc">unc</span> and set it as <b>U</b>.</div>
     <div class="od-installed"><div class="sel-empty">No models downloaded yet — pick one below.</div></div>
     <div class="plabel" style="margin-top:12px">＋ Download more</div>
+    <div class="prov-note">A download keeps running while you use the app or close this panel. Refreshing the page pauses it — just click <b>Download</b> again to resume (already-fetched parts are kept).</div>
     <div style="display:flex;gap:10px 14px;align-items:center;margin:8px 0;flex-wrap:wrap">
       <input class="od-search" type="text" placeholder="Search models…" style="flex:1;min-width:130px">
       <label style="font-size:12px;display:flex;gap:5px;align-items:center">Size
@@ -1253,8 +1282,8 @@ function buildOnDeviceBody(body){
       const row=document.createElement("div"); row.className="od-inst"; row.dataset.val=id; row.dataset.model=id; row.draggable=true;
       row.innerHTML=`<span class="mv">⠿</span>
         <div class="od-name"><b>${escapeHtml(m.name)}</b>${warm?' <span class="od-loaded">⚡ loaded</span>':''}<div class="od-meta">${escapeHtml(m.meta||"")}</div></div>
-        <button class="btn sm rn${isN?' on':''}" title="Use in Normal mode">N</button>
-        <button class="btn sm ru${isU?' on':''}" title="Use in Uncensored mode">U</button>
+        <button class="btn sm rn${isN?' on':''}" title="Use this model when chatting in Normal mode">N</button>
+        <button class="btn sm ru${isU?' on':''}" title="Use this model when chatting in Uncensored mode (does not uncensor a censored model)">U</button>
         <button class="btn sm ld" title="Load into memory now">▶</button>
         <button class="btn sm rm" title="Uninstall">🗑</button>`;
       row.querySelector(".rn").onclick=()=>{ cfg.od=id; persistCfg(); drawInstalled(); updateHint(); };
@@ -1305,9 +1334,12 @@ function buildOdRow(m, onDownloaded){
     <button class="btn sm dl">Download</button>`;
   const badge=row.querySelector(".od-badge"), dl=row.querySelector(".dl");
   if(!webgpuOK()){ badge.textContent="unavailable"; dl.disabled=true; }
-  dl.onclick=async()=>{ if(!webgpuOK()) return; badge.className="od-badge dl"; dl.disabled=true;
-    try{ await downloadModel(m.id, t=>{ badge.textContent="⬇ "+(t.length>18?t.slice(0,18)+"…":t); }); badge.className="od-badge inst"; badge.textContent="Installed ✓"; onDownloaded&&onDownloaded(); }
-    catch(e){ badge.className="od-badge no"; badge.textContent="failed"; dl.disabled=false; } };
+  dl.onclick=async()=>{ if(!webgpuOK()||odDownloading(m.id)) return;
+    try{ await downloadModel(m.id); onDownloaded&&onDownloaded(); }
+    catch(e){ /* badge already painted "failed" by downloadModel */ } };
+  // Restore live state if a download for this model is already running/finished
+  // (e.g. the modal was closed and reopened mid-download).
+  if(_odDownloads[m.id]) odPaintBadges(m.id);
   return row;
 }
 
