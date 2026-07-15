@@ -15,7 +15,7 @@
   <rect width="1200" height="320" rx="20" fill="url(#bg)"/>
   <rect x="1.5" y="1.5" width="1197" height="317" rx="19" fill="none" stroke="#30363d"/>
   <circle cx="70" cy="70" r="10" fill="#3fb950" filter="url(#glow)"/>
-  <text x="96" y="78" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="22" fill="#8b949e">ai.alouatiq.com</text>
+  <text x="96" y="78" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="22" fill="#8b949e">chat.alouatiq.com</text>
   <text x="60" y="182" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-weight="800" font-size="96" fill="#e6edf3">AL<tspan fill="url(#accent)">.AI</tspan></text>
   <text x="66" y="228" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="27" fill="#8b949e">Unlimited · Free · Serverless AI Chat</text>
   <g font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="18" fill="#c9d1d9">
