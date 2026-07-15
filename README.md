@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://ai.alouatiq.com"><img src="docs/banner.svg" alt="AL.AI — Unlimited, Free, Serverless AI Chat" width="100%"></a>
+  <a href="https://chat.alouatiq.com"><img src="docs/banner.svg" alt="AL.AI — Unlimited, Free, Serverless AI Chat" width="100%"></a>
 </p>
 
 <h1 align="center">AL.AI — Unlimited · Free · Serverless AI Chat</h1>
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://chat.alouatiq.com"><img alt="Live demo" src="https://img.shields.io/badge/Live%20demo-ai.alouatiq.com-3b82f6?style=for-the-badge"></a>
+  <a href="https://chat.alouatiq.com"><img alt="Live demo" src="https://img.shields.io/badge/Live%20demo-chat.alouatiq.com-3b82f6?style=for-the-badge"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge"></a>
   <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge"></a>
   <img alt="No backend" src="https://img.shields.io/badge/Backend-none-8b5cf6?style=for-the-badge">
@@ -32,7 +32,7 @@
 | | |
 |---|---|
 | **Author** | AL OUATIQ |
-| **App** | <https://ai.alouatiq.com> |
+| **App** | <https://chat.alouatiq.com> |
 | **Website** | <https://alouatiq.com> |
 | **Email** | contact@alouatiq.com |
 | **GitHub** | [@alouatiq](https://github.com/alouatiq) |
@@ -51,7 +51,7 @@ and when the cloud is rate-limited, it can run a model **fully on your device** 
 - **Your chat history lives only in your browser** (`localStorage`).
 - **Deploy your own** in minutes on Vercel, or just open `index.html`.
 
-> ⚡ Try it now: **[ai.alouatiq.com](https://ai.alouatiq.com)** — no signup, no key required.
+> ⚡ Try it now: **[chat.alouatiq.com](https://chat.alouatiq.com)** — no signup, no key required.
 
 ---
 
