@@ -102,7 +102,7 @@ and when the cloud is rate-limited, it can run a model **fully on your device** 
 ## 🚀 Quick start
 
 ### Use the hosted app
-Just open **[ai.alouatiq.com](https://ai.alouatiq.com)** — it works out of the box (shared free key), or add your own in ⚙ Settings.
+Just open **[chat.alouatiq.com](https://chat.alouatiq.com)** — it works out of the box (shared free key), or add your own in ⚙ Settings.
 
 ### Run locally
 ```bash
